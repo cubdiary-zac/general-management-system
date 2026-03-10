@@ -1,8 +1,9 @@
-import { FormEvent, useEffect, useMemo, useState } from 'react'
+import { FormEvent, KeyboardEvent, useEffect, useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { apiClient } from '../api/client'
 import { useAuth } from '../context/AuthContext'
+import { nextTaskStatus, orderedStatuses, TaskStatus } from './pm-utils'
 
 type Project = {
   id: number
@@ -10,8 +11,6 @@ type Project = {
   description: string
   ownerId: number
 }
-
-type TaskStatus = 'todo' | 'in_progress' | 'in_review' | 'done'
 
 type Task = {
   id: number
@@ -21,11 +20,33 @@ type Task = {
   status: TaskStatus
 }
 
+type TaskTransitionLog = {
+  id: number
+  taskId: number
+  fromStatus: TaskStatus
+  toStatus: TaskStatus
+  operatorId: number
+  createdAt: string
+}
+
 type ListResponse<T> = {
   items: T[]
 }
 
-const statuses: TaskStatus[] = ['todo', 'in_progress', 'in_review', 'done']
+type TaskStatusFilter = TaskStatus | 'all'
+
+function formatStatus(status: TaskStatus): string {
+  return status.split('_').join(' ')
+}
+
+function formatLogTimestamp(value: string): string {
+  const parsed = new Date(value)
+  if (Number.isNaN(parsed.getTime())) {
+    return value
+  }
+
+  return parsed.toLocaleString()
+}
 
 export function PMPage() {
   const { token } = useAuth()
@@ -35,6 +56,12 @@ export function PMPage() {
   const [projectDescription, setProjectDescription] = useState('')
   const [taskTitle, setTaskTitle] = useState('')
   const [taskDescription, setTaskDescription] = useState('')
+  const [statusFilter, setStatusFilter] = useState<TaskStatusFilter>('all')
+  const [keyword, setKeyword] = useState('')
+  const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null)
+
+  const trimmedKeyword = keyword.trim()
+  const taskListQueryKey = ['tasks', selectedProjectId, statusFilter, trimmedKeyword] as const
 
   const projectsQuery = useQuery({
     queryKey: ['projects'],
@@ -43,13 +70,35 @@ export function PMPage() {
   })
 
   const tasksQuery = useQuery({
-    queryKey: ['tasks', selectedProjectId],
-    queryFn: () =>
-      apiClient.get<ListResponse<Task>>(
-        `/api/pm/tasks?projectId=${selectedProjectId ?? ''}`,
-        token ?? undefined,
-      ),
+    queryKey: taskListQueryKey,
+    queryFn: () => {
+      const params = new URLSearchParams()
+      if (selectedProjectId !== null) {
+        params.set('projectId', String(selectedProjectId))
+      }
+      if (statusFilter !== 'all') {
+        params.set('status', statusFilter)
+      }
+      if (trimmedKeyword !== '') {
+        params.set('q', trimmedKeyword)
+      }
+
+      return apiClient.get<ListResponse<Task>>(`/api/pm/tasks?${params.toString()}`, token ?? undefined)
+    },
     enabled: Boolean(token) && selectedProjectId !== null,
+  })
+
+  const taskDetailQuery = useQuery({
+    queryKey: ['task', selectedTaskId],
+    queryFn: () => apiClient.get<Task>(`/api/pm/tasks/${selectedTaskId}`, token ?? undefined),
+    enabled: Boolean(token) && selectedTaskId !== null,
+  })
+
+  const taskLogsQuery = useQuery({
+    queryKey: ['task-logs', selectedTaskId],
+    queryFn: () =>
+      apiClient.get<ListResponse<TaskTransitionLog>>(`/api/pm/tasks/${selectedTaskId}/logs`, token ?? undefined),
+    enabled: Boolean(token) && selectedTaskId !== null,
   })
 
   useEffect(() => {
@@ -57,6 +106,21 @@ export function PMPage() {
       setSelectedProjectId(projectsQuery.data.items[0].id)
     }
   }, [projectsQuery.data, selectedProjectId])
+
+  useEffect(() => {
+    setSelectedTaskId(null)
+  }, [selectedProjectId])
+
+  useEffect(() => {
+    if (!tasksQuery.data || selectedTaskId === null) {
+      return
+    }
+
+    const stillVisible = tasksQuery.data.items.some((task) => task.id === selectedTaskId)
+    if (!stillVisible) {
+      setSelectedTaskId(null)
+    }
+  }, [tasksQuery.data, selectedTaskId])
 
   const createProjectMutation = useMutation({
     mutationFn: (payload: { name: string; description: string }) =>
@@ -76,16 +140,20 @@ export function PMPage() {
       setTaskTitle('')
       setTaskDescription('')
       // partial refresh: only refetch current tasks list
-      await queryClient.invalidateQueries({ queryKey: ['tasks', selectedProjectId] })
+      await queryClient.invalidateQueries({ queryKey: taskListQueryKey })
     },
   })
 
   const patchTaskStatusMutation = useMutation({
     mutationFn: (payload: { id: number; status: TaskStatus }) =>
       apiClient.patch<Task>(`/api/pm/tasks/${payload.id}/status`, { status: payload.status }, token ?? undefined),
-    onSuccess: async () => {
-      // partial refresh: invalidate only current task board data
-      await queryClient.invalidateQueries({ queryKey: ['tasks', selectedProjectId] })
+    onSuccess: async (_, payload) => {
+      // partial refresh: only invalidate impacted PM task queries
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: taskListQueryKey }),
+        queryClient.invalidateQueries({ queryKey: ['task', payload.id] }),
+        queryClient.invalidateQueries({ queryKey: ['task-logs', payload.id] }),
+      ])
     },
   })
 
@@ -135,12 +203,11 @@ export function PMPage() {
     })
   }
 
-  function nextStatus(status: TaskStatus): TaskStatus | null {
-    const idx = statuses.indexOf(status)
-    if (idx < 0 || idx === statuses.length - 1) {
-      return null
+  function onTaskCardKeyDown(event: KeyboardEvent<HTMLDivElement>, taskId: number) {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      setSelectedTaskId(taskId)
     }
-    return statuses[idx + 1]
   }
 
   return (
@@ -208,29 +275,60 @@ export function PMPage() {
               {createTaskMutation.isPending ? 'Creating...' : 'Create Task'}
             </button>
           </form>
+
+          <div className="task-filters">
+            <select
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value as TaskStatusFilter)}
+              disabled={!selectedProjectId}
+            >
+              <option value="all">All statuses</option>
+              {orderedStatuses.map((status) => (
+                <option key={status} value={status}>
+                  {formatStatus(status)}
+                </option>
+              ))}
+            </select>
+            <input
+              placeholder="Search by task title"
+              value={keyword}
+              onChange={(event) => setKeyword(event.target.value)}
+              disabled={!selectedProjectId}
+            />
+          </div>
         </article>
       </div>
 
       <section className="kanban-grid">
-        {statuses.map((status) => (
+        {orderedStatuses.map((status) => (
           <article key={status} className="kanban-column">
-            <h3>{status.replace('_', ' ')}</h3>
+            <h3>{formatStatus(status)}</h3>
             <div className="stack-sm">
               {board[status].map((task) => {
-                const next = nextStatus(task.status)
+                const next = nextTaskStatus(task.status)
 
                 return (
-                  <div key={task.id} className="task-card">
+                  <div
+                    key={task.id}
+                    className={selectedTaskId === task.id ? 'task-card clickable active' : 'task-card clickable'}
+                    onClick={() => setSelectedTaskId(task.id)}
+                    onKeyDown={(event) => onTaskCardKeyDown(event, task.id)}
+                    role="button"
+                    tabIndex={0}
+                  >
                     <strong>{task.title}</strong>
                     <p className="muted">{task.description || 'No description'}</p>
                     {next ? (
                       <button
                         type="button"
                         className="btn-secondary"
-                        onClick={() => patchTaskStatusMutation.mutate({ id: task.id, status: next })}
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          patchTaskStatusMutation.mutate({ id: task.id, status: next })
+                        }}
                         disabled={patchTaskStatusMutation.isPending}
                       >
-                        Move to {next.replace('_', ' ')}
+                        Move to {formatStatus(next)}
                       </button>
                     ) : (
                       <span className="done-badge">Completed</span>
@@ -242,6 +340,49 @@ export function PMPage() {
             </div>
           </article>
         ))}
+      </section>
+
+      <section className="panel task-detail-panel stack-md">
+        <div className="task-detail-heading">
+          <h2>Task Detail</h2>
+          {selectedTaskId && <small className="muted">#{selectedTaskId}</small>}
+        </div>
+
+        {!selectedTaskId && <p className="muted">Select a task card to inspect its detail and transition logs.</p>}
+
+        {selectedTaskId && taskDetailQuery.isPending && <p className="muted">Loading task detail...</p>}
+
+        {selectedTaskId && taskDetailQuery.data && (
+          <article className="stack-sm">
+            <strong>{taskDetailQuery.data.title}</strong>
+            <p className="muted">{taskDetailQuery.data.description || 'No description'}</p>
+            <div className="task-meta-row">
+              <span>Status: {formatStatus(taskDetailQuery.data.status)}</span>
+              <span>Project: #{taskDetailQuery.data.projectId}</span>
+            </div>
+          </article>
+        )}
+
+        {selectedTaskId && (
+          <article className="stack-sm">
+            <h3>Transition Logs</h3>
+            {taskLogsQuery.isPending && <p className="muted">Loading transition logs...</p>}
+            {!taskLogsQuery.isPending &&
+              (taskLogsQuery.data?.items ?? []).map((log) => (
+                <div key={log.id} className="log-item">
+                  <p>
+                    <strong>{formatStatus(log.fromStatus)}</strong> to <strong>{formatStatus(log.toStatus)}</strong>
+                  </p>
+                  <p className="muted">
+                    By user #{log.operatorId} at {formatLogTimestamp(log.createdAt)}
+                  </p>
+                </div>
+              ))}
+            {!taskLogsQuery.isPending && (taskLogsQuery.data?.items?.length ?? 0) === 0 && (
+              <p className="muted">No transitions yet.</p>
+            )}
+          </article>
+        )}
       </section>
     </section>
   )

@@ -82,6 +82,8 @@ func (h *PMHandler) CreateProject(c *gin.Context) {
 
 func (h *PMHandler) ListTasks(c *gin.Context) {
 	projectIDParam := strings.TrimSpace(c.Query("projectId"))
+	statusParam := strings.TrimSpace(c.Query("status"))
+	keyword := strings.TrimSpace(c.Query("q"))
 	tasks := make([]models.Task, 0)
 
 	query := h.db.Order("id desc")
@@ -94,12 +96,45 @@ func (h *PMHandler) ListTasks(c *gin.Context) {
 		query = query.Where("project_id = ?", projectID)
 	}
 
+	if statusParam != "" {
+		status := models.TaskStatus(statusParam)
+		if !status.IsValid() {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid status"})
+			return
+		}
+		query = query.Where("status = ?", status)
+	}
+
+	if keyword != "" {
+		query = query.Where("LOWER(title) LIKE ?", "%"+strings.ToLower(keyword)+"%")
+	}
+
 	if err := query.Find(&tasks).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list tasks"})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"items": tasks})
+}
+
+func (h *PMHandler) GetTask(c *gin.Context) {
+	taskID, err := strconv.Atoi(c.Param("id"))
+	if err != nil || taskID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid task id"})
+		return
+	}
+
+	var task models.Task
+	if err := h.db.First(&task, taskID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "task not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load task"})
+		return
+	}
+
+	c.JSON(http.StatusOK, task)
 }
 
 func (h *PMHandler) CreateTask(c *gin.Context) {
@@ -147,6 +182,12 @@ func (h *PMHandler) CreateTask(c *gin.Context) {
 }
 
 func (h *PMHandler) PatchTaskStatus(c *gin.Context) {
+	user, ok := middleware.CurrentUser(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return
+	}
+
 	taskID, err := strconv.Atoi(c.Param("id"))
 	if err != nil || taskID <= 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid task id"})
@@ -184,13 +225,53 @@ func (h *PMHandler) PatchTaskStatus(c *gin.Context) {
 		return
 	}
 
+	fromStatus := task.Status
 	task.Status = req.Status
-	if err := h.db.Save(&task).Error; err != nil {
+	if err := h.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Save(&task).Error; err != nil {
+			return err
+		}
+
+		logEntry := models.TaskTransitionLog{
+			TaskID:     task.ID,
+			FromStatus: fromStatus,
+			ToStatus:   req.Status,
+			OperatorID: user.ID,
+		}
+
+		return tx.Create(&logEntry).Error
+	}); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update task status"})
 		return
 	}
 
 	c.JSON(http.StatusOK, task)
+}
+
+func (h *PMHandler) ListTaskLogs(c *gin.Context) {
+	taskID, err := strconv.Atoi(c.Param("id"))
+	if err != nil || taskID <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid task id"})
+		return
+	}
+
+	var task models.Task
+	if err := h.db.Select("id").First(&task, taskID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "task not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load task"})
+		return
+	}
+
+	logs := make([]models.TaskTransitionLog, 0)
+	if err := h.db.Where("task_id = ?", taskID).Order("id desc").Find(&logs).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list task logs"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"items": logs})
 }
 
 func allowedNextStatus(status models.TaskStatus) []models.TaskStatus {

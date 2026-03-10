@@ -57,4 +57,13 @@ func TestRegression_InvalidTransitionDoesNotMutateStatus(t *testing.T) {
 	if items[0].Status != "todo" {
 		t.Fatalf("expected status todo after invalid transition, got %s", items[0].Status)
 	}
+
+	logs := doJSONRequest(t, h, http.MethodGet, "/api/pm/tasks/"+itoa(taskID)+"/logs", nil, token)
+	if logs.Code != http.StatusOK {
+		t.Fatalf("logs endpoint failed: %d body=%s", logs.Code, logs.Body.String())
+	}
+	logItems := decodeJSON[listTaskLogsResp](t, logs).Items
+	if len(logItems) != 0 {
+		t.Fatalf("expected no transition logs for failed transition, got %d", len(logItems))
+	}
 }

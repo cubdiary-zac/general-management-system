@@ -25,11 +25,13 @@ body {
 }
 
 input,
+select,
 button {
   font: inherit;
 }
 
-input {
+input,
+select {
   width: 100%;
   padding: 0.65rem 0.8rem;
   border-radius: 0.6rem;
@@ -229,10 +231,53 @@ p {
   gap: 0.45rem;
 }
 
+.task-card.clickable {
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.task-card.clickable:hover,
+.task-card.clickable.active {
+  border-color: #7dd3fc;
+  box-shadow: 0 8px 20px rgba(14, 165, 233, 0.12);
+}
+
 .done-badge {
   color: var(--success);
   font-size: 0.85rem;
   font-weight: 600;
+}
+
+.task-filters {
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: minmax(180px, 220px) minmax(0, 1fr);
+}
+
+.task-detail-panel {
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.task-detail-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.task-meta-row {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.log-item {
+  border: 1px dashed var(--border);
+  border-radius: 0.6rem;
+  padding: 0.55rem 0.65rem;
+  background: #f8fafc;
+  display: grid;
+  gap: 0.25rem;
 }
 
 @media (max-width: 980px) {
@@ -252,6 +297,10 @@ p {
 
   .kanban-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .task-filters {
+    grid-template-columns: 1fr;
   }
 }
 

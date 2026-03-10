@@ -1,6 +1,6 @@
 COMPOSE=docker compose --env-file .env -f deploy/docker-compose.yml
 
-.PHONY: dev up down build test test-unit test-blackbox test-regression test-smoke test-smoke-live fmt
+.PHONY: dev up down build test test-unit test-blackbox test-regression test-smoke test-smoke-live ci-gate fmt
 
 GO_BIN := $(shell command -v go 2>/dev/null)
 ifeq ($(GO_BIN),)
@@ -44,6 +44,9 @@ test-smoke:
 
 test-smoke-live:
 	./scripts/smoke_api.sh
+
+ci-gate:
+	./scripts/ci_gate.sh
 
 fmt:
 	cd apps/backend && $(GOFMT_CMD) -w ./cmd ./internal

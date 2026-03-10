@@ -63,9 +63,14 @@ make down
 - `GET /api/auth/me`
 - `GET /api/pm/projects`
 - `POST /api/pm/projects`
-- `GET /api/pm/tasks?projectId=`
+- `GET /api/pm/tasks?projectId=&status=&q=`
+- `GET /api/pm/tasks/:id`
+- `GET /api/pm/tasks/:id/logs`
 - `POST /api/pm/tasks`
 - `PATCH /api/pm/tasks/:id/status`
+- `GET /api/crm/health`
+- `GET /api/hr/health`
+- `GET /api/fin/health`
 
 Task status flow:
 - `todo -> in_progress -> in_review -> done`
@@ -74,3 +79,4 @@ Task status flow:
 - `make dev` run backend + web locally
 - `make build` build backend and frontend
 - `make test` run backend tests
+- `make ci-gate` run backend unit+blackbox+regression+smoke tests and frontend test+build gate

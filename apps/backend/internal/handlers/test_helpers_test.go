@@ -24,7 +24,7 @@ func setupTestRouter(t *testing.T) (http.Handler, *gorm.DB, config.Config) {
 	if err != nil {
 		t.Fatalf("failed to open sqlite: %v", err)
 	}
-	if err := db.AutoMigrate(&models.User{}, &models.Project{}, &models.Task{}); err != nil {
+	if err := db.AutoMigrate(&models.User{}, &models.Project{}, &models.Task{}, &models.TaskTransitionLog{}); err != nil {
 		t.Fatalf("failed to migrate: %v", err)
 	}
 

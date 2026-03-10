@@ -22,10 +22,27 @@ type listProjectsResp struct {
 
 type listTasksResp struct {
 	Items []struct {
-		ID       int    `json:"id"`
-		ProjectID int   `json:"projectId"`
-		Status   string `json:"status"`
-		Title    string `json:"title"`
+		ID        int    `json:"id"`
+		ProjectID int    `json:"projectId"`
+		Status    string `json:"status"`
+		Title     string `json:"title"`
+	} `json:"items"`
+}
+
+type taskDetailResp struct {
+	ID        int    `json:"id"`
+	ProjectID int    `json:"projectId"`
+	Status    string `json:"status"`
+	Title     string `json:"title"`
+}
+
+type listTaskLogsResp struct {
+	Items []struct {
+		ID         int    `json:"id"`
+		TaskID     int    `json:"taskId"`
+		FromStatus string `json:"fromStatus"`
+		ToStatus   string `json:"toStatus"`
+		OperatorID int    `json:"operatorId"`
 	} `json:"items"`
 }
 
@@ -116,5 +133,130 @@ func TestBlackbox_PMProjectTaskFlow(t *testing.T) {
 	}, token)
 	if patch.Code != http.StatusOK {
 		t.Fatalf("expected patch status 200, got %d body=%s", patch.Code, patch.Body.String())
+	}
+}
+
+func TestBlackbox_PMTaskFiltersDetailAndLogs(t *testing.T) {
+	h, _, _ := setupTestRouter(t)
+
+	login := doJSONRequest(t, h, http.MethodPost, "/api/auth/login", map[string]any{
+		"email":    "admin@gms.local",
+		"password": "admin123",
+	}, "")
+	if login.Code != http.StatusOK {
+		t.Fatalf("login failed: %d body=%s", login.Code, login.Body.String())
+	}
+	loginPayload := decodeJSON[loginResp](t, login)
+	token := loginPayload.Token
+
+	projectA := doJSONRequest(t, h, http.MethodPost, "/api/pm/projects", map[string]any{
+		"name": "M3 Filters A",
+	}, token)
+	if projectA.Code != http.StatusCreated {
+		t.Fatalf("create project A failed: %d body=%s", projectA.Code, projectA.Body.String())
+	}
+	projectAID := decodeJSON[struct {
+		ID int `json:"id"`
+	}](t, projectA).ID
+
+	projectB := doJSONRequest(t, h, http.MethodPost, "/api/pm/projects", map[string]any{
+		"name": "M3 Filters B",
+	}, token)
+	if projectB.Code != http.StatusCreated {
+		t.Fatalf("create project B failed: %d body=%s", projectB.Code, projectB.Body.String())
+	}
+	projectBID := decodeJSON[struct {
+		ID int `json:"id"`
+	}](t, projectB).ID
+
+	taskA1 := doJSONRequest(t, h, http.MethodPost, "/api/pm/tasks", map[string]any{
+		"projectId": projectAID,
+		"title":     "alpha wireframes",
+	}, token)
+	if taskA1.Code != http.StatusCreated {
+		t.Fatalf("create task A1 failed: %d body=%s", taskA1.Code, taskA1.Body.String())
+	}
+	taskA1ID := decodeJSON[struct {
+		ID int `json:"id"`
+	}](t, taskA1).ID
+
+	taskA2 := doJSONRequest(t, h, http.MethodPost, "/api/pm/tasks", map[string]any{
+		"projectId": projectAID,
+		"title":     "beta docs",
+	}, token)
+	if taskA2.Code != http.StatusCreated {
+		t.Fatalf("create task A2 failed: %d body=%s", taskA2.Code, taskA2.Body.String())
+	}
+
+	taskB1 := doJSONRequest(t, h, http.MethodPost, "/api/pm/tasks", map[string]any{
+		"projectId": projectBID,
+		"title":     "alpha follow-up",
+	}, token)
+	if taskB1.Code != http.StatusCreated {
+		t.Fatalf("create task B1 failed: %d body=%s", taskB1.Code, taskB1.Body.String())
+	}
+
+	patch := doJSONRequest(t, h, http.MethodPatch, "/api/pm/tasks/"+itoa(taskA1ID)+"/status", map[string]any{
+		"status": "in_progress",
+	}, token)
+	if patch.Code != http.StatusOK {
+		t.Fatalf("patch status failed: %d body=%s", patch.Code, patch.Body.String())
+	}
+
+	filtered := doJSONRequest(t, h, http.MethodGet, "/api/pm/tasks?projectId="+itoa(projectAID)+"&status=in_progress&q=ALPHA", nil, token)
+	if filtered.Code != http.StatusOK {
+		t.Fatalf("filtered list failed: %d body=%s", filtered.Code, filtered.Body.String())
+	}
+	filteredPayload := decodeJSON[listTasksResp](t, filtered)
+	if len(filteredPayload.Items) != 1 {
+		t.Fatalf("expected 1 filtered task, got %d", len(filteredPayload.Items))
+	}
+	if filteredPayload.Items[0].ID != taskA1ID {
+		t.Fatalf("expected filtered task id %d, got %d", taskA1ID, filteredPayload.Items[0].ID)
+	}
+
+	detail := doJSONRequest(t, h, http.MethodGet, "/api/pm/tasks/"+itoa(taskA1ID), nil, token)
+	if detail.Code != http.StatusOK {
+		t.Fatalf("detail failed: %d body=%s", detail.Code, detail.Body.String())
+	}
+	detailPayload := decodeJSON[taskDetailResp](t, detail)
+	if detailPayload.ID != taskA1ID || detailPayload.Status != "in_progress" {
+		t.Fatalf("unexpected detail payload: %+v", detailPayload)
+	}
+
+	logs := doJSONRequest(t, h, http.MethodGet, "/api/pm/tasks/"+itoa(taskA1ID)+"/logs", nil, token)
+	if logs.Code != http.StatusOK {
+		t.Fatalf("logs failed: %d body=%s", logs.Code, logs.Body.String())
+	}
+	logPayload := decodeJSON[listTaskLogsResp](t, logs)
+	if len(logPayload.Items) == 0 {
+		t.Fatalf("expected at least one transition log")
+	}
+	firstLog := logPayload.Items[0]
+	if firstLog.TaskID != taskA1ID || firstLog.FromStatus != "todo" || firstLog.ToStatus != "in_progress" {
+		t.Fatalf("unexpected transition log payload: %+v", firstLog)
+	}
+	if firstLog.OperatorID != loginPayload.User.ID {
+		t.Fatalf("expected operator %d, got %d", loginPayload.User.ID, firstLog.OperatorID)
+	}
+}
+
+func TestBlackbox_ModuleStubHealthEndpoints(t *testing.T) {
+	h, _, _ := setupTestRouter(t)
+
+	login := doJSONRequest(t, h, http.MethodPost, "/api/auth/login", map[string]any{
+		"email":    "admin@gms.local",
+		"password": "admin123",
+	}, "")
+	if login.Code != http.StatusOK {
+		t.Fatalf("login failed: %d body=%s", login.Code, login.Body.String())
+	}
+	token := decodeJSON[loginResp](t, login).Token
+
+	for _, moduleName := range []string{"crm", "hr", "fin"} {
+		resp := doJSONRequest(t, h, http.MethodGet, "/api/"+moduleName+"/health", nil, token)
+		if resp.Code != http.StatusOK {
+			t.Fatalf("module %s health failed: %d body=%s", moduleName, resp.Code, resp.Body.String())
+		}
 	}
 }
