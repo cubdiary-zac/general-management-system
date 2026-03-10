@@ -1,0 +1,11 @@
+.env
+.env.local
+.DS_Store
+
+apps/backend/bin/
+apps/backend/coverage/
+
+apps/web/node_modules/
+apps/web/dist/
+
+memory/*.tmp
