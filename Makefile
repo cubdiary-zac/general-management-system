@@ -1,6 +1,6 @@
 COMPOSE=docker compose --env-file .env -f deploy/docker-compose.yml
 
-.PHONY: dev up down build test fmt
+.PHONY: dev up down build test test-unit test-blackbox test-regression test-smoke test-smoke-live fmt
 
 GO_BIN := $(shell command -v go 2>/dev/null)
 ifeq ($(GO_BIN),)
@@ -28,8 +28,22 @@ build:
 	cd apps/backend && $(GO_CMD) build ./...
 	cd apps/web && npm run build
 
-test:
-	cd apps/backend && $(GO_CMD) test ./...
+test: test-unit test-blackbox test-regression
+
+test-unit:
+	cd apps/backend && $(GO_CMD) test ./internal/auth ./internal/models
+
+test-blackbox:
+	cd apps/backend && $(GO_CMD) test ./internal/handlers -run Blackbox
+
+test-regression:
+	cd apps/backend && $(GO_CMD) test ./internal/handlers -run Regression
+
+test-smoke:
+	cd apps/backend && $(GO_CMD) test ./internal/handlers -run Smoke
+
+test-smoke-live:
+	./scripts/smoke_api.sh
 
 fmt:
 	cd apps/backend && $(GOFMT_CMD) -w ./cmd ./internal
