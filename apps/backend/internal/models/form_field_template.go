@@ -31,6 +31,8 @@ type FormFieldTemplate struct {
 	Description    string              `gorm:"size:1000" json:"description"`
 	Version        int                 `gorm:"not null;default:1" json:"version"`
 	Status         TemplateStatus      `gorm:"type:varchar(20);not null;default:draft" json:"status"`
+	PublishedAt    *time.Time          `json:"publishedAt,omitempty"`
+	PublishedBy    *uint               `gorm:"index" json:"publishedBy,omitempty"`
 	Position       int                 `gorm:"not null;default:1" json:"position"`
 	WidgetType     FormFieldWidgetType `gorm:"type:varchar(30);not null" json:"widgetType"`
 }

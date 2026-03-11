@@ -3,11 +3,14 @@ package handlers
 import (
 	"errors"
 	"net/http"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 
+	"gms/backend/internal/middleware"
 	"gms/backend/internal/models"
 )
 
@@ -68,8 +71,21 @@ type createFormFieldTemplateRequest struct {
 }
 
 func (h *TemplateHandler) ListIndustryTemplates(c *gin.Context) {
+	filters, ok := parseTemplateListCommonFilters(c)
+	if !ok {
+		return
+	}
+
 	items := make([]models.IndustryTemplate, 0)
-	if err := h.db.Order("id desc").Find(&items).Error; err != nil {
+	query := h.db.Order("id desc")
+	if filters.status != nil {
+		query = query.Where("status = ?", *filters.status)
+	}
+	if filters.version != nil {
+		query = query.Where("version = ?", *filters.version)
+	}
+
+	if err := query.Find(&items).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list industry templates"})
 		return
 	}
@@ -119,8 +135,29 @@ func (h *TemplateHandler) CreateIndustryTemplate(c *gin.Context) {
 }
 
 func (h *TemplateHandler) ListProjectTemplates(c *gin.Context) {
+	filters, ok := parseTemplateListCommonFilters(c)
+	if !ok {
+		return
+	}
+
+	industryTemplateID, ok := parsePositiveIntQuery(c, "industryTemplateId")
+	if !ok {
+		return
+	}
+
 	items := make([]models.ProjectTemplate, 0)
-	if err := h.db.Order("id desc").Find(&items).Error; err != nil {
+	query := h.db.Order("id desc")
+	if filters.status != nil {
+		query = query.Where("status = ?", *filters.status)
+	}
+	if filters.version != nil {
+		query = query.Where("version = ?", *filters.version)
+	}
+	if industryTemplateID != nil {
+		query = query.Where("industry_template_id = ?", *industryTemplateID)
+	}
+
+	if err := query.Find(&items).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list project templates"})
 		return
 	}
@@ -186,8 +223,29 @@ func (h *TemplateHandler) CreateProjectTemplate(c *gin.Context) {
 }
 
 func (h *TemplateHandler) ListStageTemplates(c *gin.Context) {
+	filters, ok := parseTemplateListCommonFilters(c)
+	if !ok {
+		return
+	}
+
+	projectTemplateID, ok := parsePositiveIntQuery(c, "projectTemplateId")
+	if !ok {
+		return
+	}
+
 	items := make([]models.StageTemplate, 0)
-	if err := h.db.Order("project_template_id asc, position asc, id asc").Find(&items).Error; err != nil {
+	query := h.db.Order("project_template_id asc, position asc, id asc")
+	if filters.status != nil {
+		query = query.Where("status = ?", *filters.status)
+	}
+	if filters.version != nil {
+		query = query.Where("version = ?", *filters.version)
+	}
+	if projectTemplateID != nil {
+		query = query.Where("project_template_id = ?", *projectTemplateID)
+	}
+
+	if err := query.Find(&items).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list stage templates"})
 		return
 	}
@@ -260,8 +318,29 @@ func (h *TemplateHandler) CreateStageTemplate(c *gin.Context) {
 }
 
 func (h *TemplateHandler) ListFormTemplates(c *gin.Context) {
+	filters, ok := parseTemplateListCommonFilters(c)
+	if !ok {
+		return
+	}
+
+	stageTemplateID, ok := parsePositiveIntQuery(c, "stageTemplateId")
+	if !ok {
+		return
+	}
+
 	items := make([]models.FormTemplate, 0)
-	if err := h.db.Order("stage_template_id asc, position asc, id asc").Find(&items).Error; err != nil {
+	query := h.db.Order("stage_template_id asc, position asc, id asc")
+	if filters.status != nil {
+		query = query.Where("status = ?", *filters.status)
+	}
+	if filters.version != nil {
+		query = query.Where("version = ?", *filters.version)
+	}
+	if stageTemplateID != nil {
+		query = query.Where("stage_template_id = ?", *stageTemplateID)
+	}
+
+	if err := query.Find(&items).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list form templates"})
 		return
 	}
@@ -334,8 +413,29 @@ func (h *TemplateHandler) CreateFormTemplate(c *gin.Context) {
 }
 
 func (h *TemplateHandler) ListFormFieldTemplates(c *gin.Context) {
+	filters, ok := parseTemplateListCommonFilters(c)
+	if !ok {
+		return
+	}
+
+	formTemplateID, ok := parsePositiveIntQuery(c, "formTemplateId")
+	if !ok {
+		return
+	}
+
 	items := make([]models.FormFieldTemplate, 0)
-	if err := h.db.Order("form_template_id asc, position asc, id asc").Find(&items).Error; err != nil {
+	query := h.db.Order("form_template_id asc, position asc, id asc")
+	if filters.status != nil {
+		query = query.Where("status = ?", *filters.status)
+	}
+	if filters.version != nil {
+		query = query.Where("version = ?", *filters.version)
+	}
+	if formTemplateID != nil {
+		query = query.Where("form_template_id = ?", *formTemplateID)
+	}
+
+	if err := query.Find(&items).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list form field templates"})
 		return
 	}
@@ -415,6 +515,486 @@ func (h *TemplateHandler) CreateFormFieldTemplate(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, item)
+}
+
+func (h *TemplateHandler) PublishIndustryTemplate(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		return
+	}
+
+	templateID, ok := parsePositiveUintParam(c, "id")
+	if !ok {
+		return
+	}
+
+	var item models.IndustryTemplate
+	if err := h.db.First(&item, templateID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "industry template not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load industry template"})
+		return
+	}
+
+	publishedAt := time.Now().UTC()
+	publishedBy := userID
+	item.Status = models.TemplateStatusPublished
+	item.PublishedAt = &publishedAt
+	item.PublishedBy = &publishedBy
+
+	if err := h.db.Save(&item).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to publish industry template"})
+		return
+	}
+
+	c.JSON(http.StatusOK, item)
+}
+
+func (h *TemplateHandler) UnpublishIndustryTemplate(c *gin.Context) {
+	templateID, ok := parsePositiveUintParam(c, "id")
+	if !ok {
+		return
+	}
+
+	var item models.IndustryTemplate
+	if err := h.db.First(&item, templateID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "industry template not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load industry template"})
+		return
+	}
+
+	var publishedChildren int64
+	if err := h.db.Model(&models.ProjectTemplate{}).
+		Where("industry_template_id = ? AND status = ?", item.ID, models.TemplateStatusPublished).
+		Count(&publishedChildren).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to verify project templates"})
+		return
+	}
+	if publishedChildren > 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "cannot unpublish industry template: published project templates exist"})
+		return
+	}
+
+	item.Status = models.TemplateStatusDraft
+	item.PublishedAt = nil
+	item.PublishedBy = nil
+
+	if err := h.db.Save(&item).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to unpublish industry template"})
+		return
+	}
+
+	c.JSON(http.StatusOK, item)
+}
+
+func (h *TemplateHandler) PublishProjectTemplate(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		return
+	}
+
+	templateID, ok := parsePositiveUintParam(c, "id")
+	if !ok {
+		return
+	}
+
+	var item models.ProjectTemplate
+	if err := h.db.First(&item, templateID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "project template not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load project template"})
+		return
+	}
+
+	var parent models.IndustryTemplate
+	if err := h.db.Select("id", "status").First(&parent, item.IndustryTemplateID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "cannot publish project template: parent industry template not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to verify parent industry template"})
+		return
+	}
+	if parent.Status != models.TemplateStatusPublished {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "cannot publish project template: industry template must be published first"})
+		return
+	}
+
+	publishedAt := time.Now().UTC()
+	publishedBy := userID
+	item.Status = models.TemplateStatusPublished
+	item.PublishedAt = &publishedAt
+	item.PublishedBy = &publishedBy
+
+	if err := h.db.Save(&item).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to publish project template"})
+		return
+	}
+
+	c.JSON(http.StatusOK, item)
+}
+
+func (h *TemplateHandler) UnpublishProjectTemplate(c *gin.Context) {
+	templateID, ok := parsePositiveUintParam(c, "id")
+	if !ok {
+		return
+	}
+
+	var item models.ProjectTemplate
+	if err := h.db.First(&item, templateID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "project template not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load project template"})
+		return
+	}
+
+	var publishedChildren int64
+	if err := h.db.Model(&models.StageTemplate{}).
+		Where("project_template_id = ? AND status = ?", item.ID, models.TemplateStatusPublished).
+		Count(&publishedChildren).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to verify stage templates"})
+		return
+	}
+	if publishedChildren > 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "cannot unpublish project template: published stage templates exist"})
+		return
+	}
+
+	item.Status = models.TemplateStatusDraft
+	item.PublishedAt = nil
+	item.PublishedBy = nil
+
+	if err := h.db.Save(&item).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to unpublish project template"})
+		return
+	}
+
+	c.JSON(http.StatusOK, item)
+}
+
+func (h *TemplateHandler) PublishStageTemplate(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		return
+	}
+
+	templateID, ok := parsePositiveUintParam(c, "id")
+	if !ok {
+		return
+	}
+
+	var item models.StageTemplate
+	if err := h.db.First(&item, templateID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "stage template not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load stage template"})
+		return
+	}
+
+	var parent models.ProjectTemplate
+	if err := h.db.Select("id", "status").First(&parent, item.ProjectTemplateID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "cannot publish stage template: parent project template not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to verify parent project template"})
+		return
+	}
+	if parent.Status != models.TemplateStatusPublished {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "cannot publish stage template: project template must be published first"})
+		return
+	}
+
+	publishedAt := time.Now().UTC()
+	publishedBy := userID
+	item.Status = models.TemplateStatusPublished
+	item.PublishedAt = &publishedAt
+	item.PublishedBy = &publishedBy
+
+	if err := h.db.Save(&item).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to publish stage template"})
+		return
+	}
+
+	c.JSON(http.StatusOK, item)
+}
+
+func (h *TemplateHandler) UnpublishStageTemplate(c *gin.Context) {
+	templateID, ok := parsePositiveUintParam(c, "id")
+	if !ok {
+		return
+	}
+
+	var item models.StageTemplate
+	if err := h.db.First(&item, templateID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "stage template not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load stage template"})
+		return
+	}
+
+	var publishedChildren int64
+	if err := h.db.Model(&models.FormTemplate{}).
+		Where("stage_template_id = ? AND status = ?", item.ID, models.TemplateStatusPublished).
+		Count(&publishedChildren).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to verify form templates"})
+		return
+	}
+	if publishedChildren > 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "cannot unpublish stage template: published form templates exist"})
+		return
+	}
+
+	item.Status = models.TemplateStatusDraft
+	item.PublishedAt = nil
+	item.PublishedBy = nil
+
+	if err := h.db.Save(&item).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to unpublish stage template"})
+		return
+	}
+
+	c.JSON(http.StatusOK, item)
+}
+
+func (h *TemplateHandler) PublishFormTemplate(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		return
+	}
+
+	templateID, ok := parsePositiveUintParam(c, "id")
+	if !ok {
+		return
+	}
+
+	var item models.FormTemplate
+	if err := h.db.First(&item, templateID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "form template not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load form template"})
+		return
+	}
+
+	var parent models.StageTemplate
+	if err := h.db.Select("id", "status").First(&parent, item.StageTemplateID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "cannot publish form template: parent stage template not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to verify parent stage template"})
+		return
+	}
+	if parent.Status != models.TemplateStatusPublished {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "cannot publish form template: stage template must be published first"})
+		return
+	}
+
+	publishedAt := time.Now().UTC()
+	publishedBy := userID
+	item.Status = models.TemplateStatusPublished
+	item.PublishedAt = &publishedAt
+	item.PublishedBy = &publishedBy
+
+	if err := h.db.Save(&item).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to publish form template"})
+		return
+	}
+
+	c.JSON(http.StatusOK, item)
+}
+
+func (h *TemplateHandler) UnpublishFormTemplate(c *gin.Context) {
+	templateID, ok := parsePositiveUintParam(c, "id")
+	if !ok {
+		return
+	}
+
+	var item models.FormTemplate
+	if err := h.db.First(&item, templateID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "form template not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load form template"})
+		return
+	}
+
+	var publishedChildren int64
+	if err := h.db.Model(&models.FormFieldTemplate{}).
+		Where("form_template_id = ? AND status = ?", item.ID, models.TemplateStatusPublished).
+		Count(&publishedChildren).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to verify field templates"})
+		return
+	}
+	if publishedChildren > 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "cannot unpublish form template: published field templates exist"})
+		return
+	}
+
+	item.Status = models.TemplateStatusDraft
+	item.PublishedAt = nil
+	item.PublishedBy = nil
+
+	if err := h.db.Save(&item).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to unpublish form template"})
+		return
+	}
+
+	c.JSON(http.StatusOK, item)
+}
+
+func (h *TemplateHandler) PublishFormFieldTemplate(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		return
+	}
+
+	templateID, ok := parsePositiveUintParam(c, "id")
+	if !ok {
+		return
+	}
+
+	var item models.FormFieldTemplate
+	if err := h.db.First(&item, templateID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "field template not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load field template"})
+		return
+	}
+
+	var parent models.FormTemplate
+	if err := h.db.Select("id", "status").First(&parent, item.FormTemplateID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "cannot publish field template: parent form template not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to verify parent form template"})
+		return
+	}
+	if parent.Status != models.TemplateStatusPublished {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "cannot publish field template: form template must be published first"})
+		return
+	}
+
+	publishedAt := time.Now().UTC()
+	publishedBy := userID
+	item.Status = models.TemplateStatusPublished
+	item.PublishedAt = &publishedAt
+	item.PublishedBy = &publishedBy
+
+	if err := h.db.Save(&item).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to publish field template"})
+		return
+	}
+
+	c.JSON(http.StatusOK, item)
+}
+
+func (h *TemplateHandler) UnpublishFormFieldTemplate(c *gin.Context) {
+	templateID, ok := parsePositiveUintParam(c, "id")
+	if !ok {
+		return
+	}
+
+	var item models.FormFieldTemplate
+	if err := h.db.First(&item, templateID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "field template not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load field template"})
+		return
+	}
+
+	item.Status = models.TemplateStatusDraft
+	item.PublishedAt = nil
+	item.PublishedBy = nil
+
+	if err := h.db.Save(&item).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to unpublish field template"})
+		return
+	}
+
+	c.JSON(http.StatusOK, item)
+}
+
+type templateListCommonFilters struct {
+	status  *models.TemplateStatus
+	version *int
+}
+
+func parseTemplateListCommonFilters(c *gin.Context) (templateListCommonFilters, bool) {
+	filters := templateListCommonFilters{}
+
+	statusParam := strings.TrimSpace(c.Query("status"))
+	if statusParam != "" {
+		status := models.TemplateStatus(statusParam)
+		if !status.IsValid() {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid status"})
+			return filters, false
+		}
+		filters.status = &status
+	}
+
+	version, ok := parsePositiveIntQuery(c, "version")
+	if !ok {
+		return filters, false
+	}
+	filters.version = version
+
+	return filters, true
+}
+
+func parsePositiveIntQuery(c *gin.Context, key string) (*int, bool) {
+	value := strings.TrimSpace(c.Query(key))
+	if value == "" {
+		return nil, true
+	}
+
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": key + " must be a positive integer"})
+		return nil, false
+	}
+
+	return &parsed, true
+}
+
+func parsePositiveUintParam(c *gin.Context, key string) (uint, bool) {
+	value := strings.TrimSpace(c.Param(key))
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": key + " must be a positive integer"})
+		return 0, false
+	}
+	return uint(parsed), true
+}
+
+func currentUserID(c *gin.Context) (uint, bool) {
+	user, ok := middleware.CurrentUser(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
+		return 0, false
+	}
+	return user.ID, true
 }
 
 func normalizeTemplateStatus(status models.TemplateStatus) (models.TemplateStatus, bool) {

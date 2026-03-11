@@ -3,6 +3,7 @@ package handlers
 import (
 	"net/http"
 	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -68,41 +69,72 @@ type crmSummaryResp struct {
 
 type listIndustryTemplatesResp struct {
 	Items []struct {
-		ID   int    `json:"id"`
-		Name string `json:"name"`
+		ID          int     `json:"id"`
+		Name        string  `json:"name"`
+		Status      string  `json:"status"`
+		Version     int     `json:"version"`
+		PublishedAt *string `json:"publishedAt"`
+		PublishedBy *int    `json:"publishedBy"`
 	} `json:"items"`
 }
 
 type listProjectTemplatesResp struct {
 	Items []struct {
-		ID                 int `json:"id"`
-		IndustryTemplateID int `json:"industryTemplateId"`
+		ID                 int     `json:"id"`
+		IndustryTemplateID int     `json:"industryTemplateId"`
+		Status             string  `json:"status"`
+		Version            int     `json:"version"`
+		PublishedAt        *string `json:"publishedAt"`
+		PublishedBy        *int    `json:"publishedBy"`
 	} `json:"items"`
 }
 
 type listStageTemplatesResp struct {
 	Items []struct {
-		ID                int `json:"id"`
-		ProjectTemplateID int `json:"projectTemplateId"`
-		Position          int `json:"position"`
+		ID                int     `json:"id"`
+		ProjectTemplateID int     `json:"projectTemplateId"`
+		Position          int     `json:"position"`
+		Status            string  `json:"status"`
+		Version           int     `json:"version"`
+		PublishedAt       *string `json:"publishedAt"`
+		PublishedBy       *int    `json:"publishedBy"`
 	} `json:"items"`
 }
 
 type listFormTemplatesResp struct {
 	Items []struct {
-		ID              int `json:"id"`
-		StageTemplateID int `json:"stageTemplateId"`
-		Position        int `json:"position"`
+		ID              int     `json:"id"`
+		StageTemplateID int     `json:"stageTemplateId"`
+		Position        int     `json:"position"`
+		Status          string  `json:"status"`
+		Version         int     `json:"version"`
+		PublishedAt     *string `json:"publishedAt"`
+		PublishedBy     *int    `json:"publishedBy"`
 	} `json:"items"`
 }
 
 type listFieldTemplatesResp struct {
 	Items []struct {
-		ID             int    `json:"id"`
-		FormTemplateID int    `json:"formTemplateId"`
-		Position       int    `json:"position"`
-		WidgetType     string `json:"widgetType"`
+		ID             int     `json:"id"`
+		FormTemplateID int     `json:"formTemplateId"`
+		Position       int     `json:"position"`
+		WidgetType     string  `json:"widgetType"`
+		Status         string  `json:"status"`
+		Version        int     `json:"version"`
+		PublishedAt    *string `json:"publishedAt"`
+		PublishedBy    *int    `json:"publishedBy"`
 	} `json:"items"`
+}
+
+type templateStateResp struct {
+	ID          int     `json:"id"`
+	Status      string  `json:"status"`
+	PublishedAt *string `json:"publishedAt"`
+	PublishedBy *int    `json:"publishedBy"`
+}
+
+type errorResp struct {
+	Error string `json:"error"`
 }
 
 func TestBlackbox_HealthAndAuth(t *testing.T) {
@@ -554,5 +586,324 @@ func TestBlackbox_TemplateEngineCreateListFlow(t *testing.T) {
 	fieldItems := decodeJSON[listFieldTemplatesResp](t, fieldTemplates).Items
 	if len(fieldItems) == 0 || fieldItems[0].ID != fieldTemplateID || fieldItems[0].FormTemplateID != formTemplateID || fieldItems[0].Position != 1 || fieldItems[0].WidgetType != "input" {
 		t.Fatalf("unexpected field template payload: %+v", fieldItems)
+	}
+}
+
+func TestBlackbox_TemplateEngineProjectTemplateListFilters(t *testing.T) {
+	h, _, _ := setupTestRouter(t)
+
+	login := doJSONRequest(t, h, http.MethodPost, "/api/auth/login", map[string]any{
+		"email":    "admin@gms.local",
+		"password": "admin123",
+	}, "")
+	if login.Code != http.StatusOK {
+		t.Fatalf("login failed: %d body=%s", login.Code, login.Body.String())
+	}
+	token := decodeJSON[loginResp](t, login).Token
+
+	createIndustryOne := doJSONRequest(t, h, http.MethodPost, "/api/tmpl/industries", map[string]any{
+		"name": "Industry One",
+		"code": "industry-one",
+	}, token)
+	if createIndustryOne.Code != http.StatusCreated {
+		t.Fatalf("create industry one failed: %d body=%s", createIndustryOne.Code, createIndustryOne.Body.String())
+	}
+	industryOneID := decodeJSON[struct {
+		ID int `json:"id"`
+	}](t, createIndustryOne).ID
+
+	createIndustryTwo := doJSONRequest(t, h, http.MethodPost, "/api/tmpl/industries", map[string]any{
+		"name": "Industry Two",
+		"code": "industry-two",
+	}, token)
+	if createIndustryTwo.Code != http.StatusCreated {
+		t.Fatalf("create industry two failed: %d body=%s", createIndustryTwo.Code, createIndustryTwo.Body.String())
+	}
+	industryTwoID := decodeJSON[struct {
+		ID int `json:"id"`
+	}](t, createIndustryTwo).ID
+
+	createProjectOne := doJSONRequest(t, h, http.MethodPost, "/api/tmpl/project-templates", map[string]any{
+		"industryTemplateId": industryOneID,
+		"name":               "Draft V1",
+		"code":               "draft-v1",
+		"status":             "draft",
+		"version":            1,
+	}, token)
+	if createProjectOne.Code != http.StatusCreated {
+		t.Fatalf("create project one failed: %d body=%s", createProjectOne.Code, createProjectOne.Body.String())
+	}
+	projectOneID := decodeJSON[struct {
+		ID int `json:"id"`
+	}](t, createProjectOne).ID
+
+	createProjectTwo := doJSONRequest(t, h, http.MethodPost, "/api/tmpl/project-templates", map[string]any{
+		"industryTemplateId": industryOneID,
+		"name":               "Published V2",
+		"code":               "published-v2",
+		"status":             "published",
+		"version":            2,
+	}, token)
+	if createProjectTwo.Code != http.StatusCreated {
+		t.Fatalf("create project two failed: %d body=%s", createProjectTwo.Code, createProjectTwo.Body.String())
+	}
+
+	createProjectThree := doJSONRequest(t, h, http.MethodPost, "/api/tmpl/project-templates", map[string]any{
+		"industryTemplateId": industryTwoID,
+		"name":               "Other Industry",
+		"code":               "other-industry",
+		"status":             "draft",
+		"version":            1,
+	}, token)
+	if createProjectThree.Code != http.StatusCreated {
+		t.Fatalf("create project three failed: %d body=%s", createProjectThree.Code, createProjectThree.Body.String())
+	}
+
+	filtered := doJSONRequest(t, h, http.MethodGet, "/api/tmpl/project-templates?industryTemplateId="+itoa(industryOneID)+"&status=draft&version=1", nil, token)
+	if filtered.Code != http.StatusOK {
+		t.Fatalf("list project templates with filters failed: %d body=%s", filtered.Code, filtered.Body.String())
+	}
+	filteredItems := decodeJSON[listProjectTemplatesResp](t, filtered).Items
+	if len(filteredItems) != 1 || filteredItems[0].ID != projectOneID {
+		t.Fatalf("unexpected filtered project templates payload: %+v", filteredItems)
+	}
+
+	invalidStatus := doJSONRequest(t, h, http.MethodGet, "/api/tmpl/project-templates?status=invalid", nil, token)
+	if invalidStatus.Code != http.StatusBadRequest {
+		t.Fatalf("expected invalid status 400, got %d body=%s", invalidStatus.Code, invalidStatus.Body.String())
+	}
+
+	invalidVersion := doJSONRequest(t, h, http.MethodGet, "/api/tmpl/project-templates?version=0", nil, token)
+	if invalidVersion.Code != http.StatusBadRequest {
+		t.Fatalf("expected invalid version 400, got %d body=%s", invalidVersion.Code, invalidVersion.Body.String())
+	}
+
+	invalidParent := doJSONRequest(t, h, http.MethodGet, "/api/tmpl/project-templates?industryTemplateId=0", nil, token)
+	if invalidParent.Code != http.StatusBadRequest {
+		t.Fatalf("expected invalid industryTemplateId 400, got %d body=%s", invalidParent.Code, invalidParent.Body.String())
+	}
+}
+
+func TestBlackbox_TemplateEnginePublishChainSuccess(t *testing.T) {
+	h, _, _ := setupTestRouter(t)
+
+	login := doJSONRequest(t, h, http.MethodPost, "/api/auth/login", map[string]any{
+		"email":    "admin@gms.local",
+		"password": "admin123",
+	}, "")
+	if login.Code != http.StatusOK {
+		t.Fatalf("login failed: %d body=%s", login.Code, login.Body.String())
+	}
+	loginPayload := decodeJSON[loginResp](t, login)
+	token := loginPayload.Token
+	userID := loginPayload.User.ID
+
+	createIndustry := doJSONRequest(t, h, http.MethodPost, "/api/tmpl/industries", map[string]any{
+		"name": "Manufacturing",
+		"code": "manufacturing",
+	}, token)
+	if createIndustry.Code != http.StatusCreated {
+		t.Fatalf("create industry failed: %d body=%s", createIndustry.Code, createIndustry.Body.String())
+	}
+	industryID := decodeJSON[struct {
+		ID int `json:"id"`
+	}](t, createIndustry).ID
+
+	createProject := doJSONRequest(t, h, http.MethodPost, "/api/tmpl/project-templates", map[string]any{
+		"industryTemplateId": industryID,
+		"name":               "Factory Rollout",
+		"code":               "factory-rollout",
+	}, token)
+	if createProject.Code != http.StatusCreated {
+		t.Fatalf("create project template failed: %d body=%s", createProject.Code, createProject.Body.String())
+	}
+	projectID := decodeJSON[struct {
+		ID int `json:"id"`
+	}](t, createProject).ID
+
+	createStage := doJSONRequest(t, h, http.MethodPost, "/api/tmpl/stage-templates", map[string]any{
+		"projectTemplateId": projectID,
+		"name":              "Planning",
+		"code":              "planning",
+		"position":          1,
+	}, token)
+	if createStage.Code != http.StatusCreated {
+		t.Fatalf("create stage template failed: %d body=%s", createStage.Code, createStage.Body.String())
+	}
+	stageID := decodeJSON[struct {
+		ID int `json:"id"`
+	}](t, createStage).ID
+
+	createForm := doJSONRequest(t, h, http.MethodPost, "/api/tmpl/form-templates", map[string]any{
+		"stageTemplateId": stageID,
+		"name":            "Checklist",
+		"code":            "checklist",
+		"position":        1,
+	}, token)
+	if createForm.Code != http.StatusCreated {
+		t.Fatalf("create form template failed: %d body=%s", createForm.Code, createForm.Body.String())
+	}
+	formID := decodeJSON[struct {
+		ID int `json:"id"`
+	}](t, createForm).ID
+
+	createField := doJSONRequest(t, h, http.MethodPost, "/api/tmpl/field-templates", map[string]any{
+		"formTemplateId": formID,
+		"name":           "Approver",
+		"code":           "approver",
+		"position":       1,
+		"widgetType":     "input",
+	}, token)
+	if createField.Code != http.StatusCreated {
+		t.Fatalf("create field template failed: %d body=%s", createField.Code, createField.Body.String())
+	}
+	fieldID := decodeJSON[struct {
+		ID int `json:"id"`
+	}](t, createField).ID
+
+	assertPublished := func(resp templateStateResp, expectedID int) {
+		t.Helper()
+		if resp.ID != expectedID {
+			t.Fatalf("unexpected template id: want=%d got=%d", expectedID, resp.ID)
+		}
+		if resp.Status != "published" {
+			t.Fatalf("expected status published, got %s", resp.Status)
+		}
+		if resp.PublishedAt == nil || *resp.PublishedAt == "" {
+			t.Fatalf("expected publishedAt to be set")
+		}
+		if resp.PublishedBy == nil || *resp.PublishedBy != userID {
+			t.Fatalf("expected publishedBy=%d, got %+v", userID, resp.PublishedBy)
+		}
+	}
+
+	publishIndustry := doJSONRequest(t, h, http.MethodPost, "/api/tmpl/industries/"+itoa(industryID)+"/publish", nil, token)
+	if publishIndustry.Code != http.StatusOK {
+		t.Fatalf("publish industry failed: %d body=%s", publishIndustry.Code, publishIndustry.Body.String())
+	}
+	assertPublished(decodeJSON[templateStateResp](t, publishIndustry), industryID)
+
+	publishProject := doJSONRequest(t, h, http.MethodPost, "/api/tmpl/project-templates/"+itoa(projectID)+"/publish", nil, token)
+	if publishProject.Code != http.StatusOK {
+		t.Fatalf("publish project failed: %d body=%s", publishProject.Code, publishProject.Body.String())
+	}
+	assertPublished(decodeJSON[templateStateResp](t, publishProject), projectID)
+
+	publishStage := doJSONRequest(t, h, http.MethodPost, "/api/tmpl/stage-templates/"+itoa(stageID)+"/publish", nil, token)
+	if publishStage.Code != http.StatusOK {
+		t.Fatalf("publish stage failed: %d body=%s", publishStage.Code, publishStage.Body.String())
+	}
+	assertPublished(decodeJSON[templateStateResp](t, publishStage), stageID)
+
+	publishForm := doJSONRequest(t, h, http.MethodPost, "/api/tmpl/form-templates/"+itoa(formID)+"/publish", nil, token)
+	if publishForm.Code != http.StatusOK {
+		t.Fatalf("publish form failed: %d body=%s", publishForm.Code, publishForm.Body.String())
+	}
+	assertPublished(decodeJSON[templateStateResp](t, publishForm), formID)
+
+	publishField := doJSONRequest(t, h, http.MethodPost, "/api/tmpl/field-templates/"+itoa(fieldID)+"/publish", nil, token)
+	if publishField.Code != http.StatusOK {
+		t.Fatalf("publish field failed: %d body=%s", publishField.Code, publishField.Body.String())
+	}
+	assertPublished(decodeJSON[templateStateResp](t, publishField), fieldID)
+}
+
+func TestBlackbox_TemplateEnginePublishBlockedWhenParentDraft(t *testing.T) {
+	h, _, _ := setupTestRouter(t)
+
+	login := doJSONRequest(t, h, http.MethodPost, "/api/auth/login", map[string]any{
+		"email":    "admin@gms.local",
+		"password": "admin123",
+	}, "")
+	if login.Code != http.StatusOK {
+		t.Fatalf("login failed: %d body=%s", login.Code, login.Body.String())
+	}
+	token := decodeJSON[loginResp](t, login).Token
+
+	createIndustry := doJSONRequest(t, h, http.MethodPost, "/api/tmpl/industries", map[string]any{
+		"name": "Energy",
+		"code": "energy",
+	}, token)
+	if createIndustry.Code != http.StatusCreated {
+		t.Fatalf("create industry failed: %d body=%s", createIndustry.Code, createIndustry.Body.String())
+	}
+	industryID := decodeJSON[struct {
+		ID int `json:"id"`
+	}](t, createIndustry).ID
+
+	createProject := doJSONRequest(t, h, http.MethodPost, "/api/tmpl/project-templates", map[string]any{
+		"industryTemplateId": industryID,
+		"name":               "Solar Setup",
+		"code":               "solar-setup",
+	}, token)
+	if createProject.Code != http.StatusCreated {
+		t.Fatalf("create project failed: %d body=%s", createProject.Code, createProject.Body.String())
+	}
+	projectID := decodeJSON[struct {
+		ID int `json:"id"`
+	}](t, createProject).ID
+
+	publishProject := doJSONRequest(t, h, http.MethodPost, "/api/tmpl/project-templates/"+itoa(projectID)+"/publish", nil, token)
+	if publishProject.Code != http.StatusBadRequest {
+		t.Fatalf("expected publish project 400 when parent is draft, got %d body=%s", publishProject.Code, publishProject.Body.String())
+	}
+	errPayload := decodeJSON[errorResp](t, publishProject)
+	if !strings.Contains(errPayload.Error, "industry template must be published first") {
+		t.Fatalf("unexpected hierarchy error message: %s", errPayload.Error)
+	}
+}
+
+func TestBlackbox_TemplateEngineUnpublishBlockedWhenPublishedChildExists(t *testing.T) {
+	h, _, _ := setupTestRouter(t)
+
+	login := doJSONRequest(t, h, http.MethodPost, "/api/auth/login", map[string]any{
+		"email":    "admin@gms.local",
+		"password": "admin123",
+	}, "")
+	if login.Code != http.StatusOK {
+		t.Fatalf("login failed: %d body=%s", login.Code, login.Body.String())
+	}
+	token := decodeJSON[loginResp](t, login).Token
+
+	createIndustry := doJSONRequest(t, h, http.MethodPost, "/api/tmpl/industries", map[string]any{
+		"name": "Logistics",
+		"code": "logistics",
+	}, token)
+	if createIndustry.Code != http.StatusCreated {
+		t.Fatalf("create industry failed: %d body=%s", createIndustry.Code, createIndustry.Body.String())
+	}
+	industryID := decodeJSON[struct {
+		ID int `json:"id"`
+	}](t, createIndustry).ID
+
+	createProject := doJSONRequest(t, h, http.MethodPost, "/api/tmpl/project-templates", map[string]any{
+		"industryTemplateId": industryID,
+		"name":               "Warehouse Build",
+		"code":               "warehouse-build",
+	}, token)
+	if createProject.Code != http.StatusCreated {
+		t.Fatalf("create project failed: %d body=%s", createProject.Code, createProject.Body.String())
+	}
+	projectID := decodeJSON[struct {
+		ID int `json:"id"`
+	}](t, createProject).ID
+
+	publishIndustry := doJSONRequest(t, h, http.MethodPost, "/api/tmpl/industries/"+itoa(industryID)+"/publish", nil, token)
+	if publishIndustry.Code != http.StatusOK {
+		t.Fatalf("publish industry failed: %d body=%s", publishIndustry.Code, publishIndustry.Body.String())
+	}
+
+	publishProject := doJSONRequest(t, h, http.MethodPost, "/api/tmpl/project-templates/"+itoa(projectID)+"/publish", nil, token)
+	if publishProject.Code != http.StatusOK {
+		t.Fatalf("publish project failed: %d body=%s", publishProject.Code, publishProject.Body.String())
+	}
+
+	unpublishIndustry := doJSONRequest(t, h, http.MethodPost, "/api/tmpl/industries/"+itoa(industryID)+"/unpublish", nil, token)
+	if unpublishIndustry.Code != http.StatusBadRequest {
+		t.Fatalf("expected unpublish industry 400 while published child exists, got %d body=%s", unpublishIndustry.Code, unpublishIndustry.Body.String())
+	}
+	errPayload := decodeJSON[errorResp](t, unpublishIndustry)
+	if !strings.Contains(errPayload.Error, "published project templates exist") {
+		t.Fatalf("unexpected hierarchy error message: %s", errPayload.Error)
 	}
 }
