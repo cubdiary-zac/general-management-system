@@ -35,14 +35,9 @@ type SummaryResponse = {
 
 type LeadStatusFilter = LeadStatus | 'all'
 
-const currencyFormatter = new Intl.NumberFormat('en-US', {
-  style: 'currency',
-  currency: 'USD',
-})
-
 export function CRMPage() {
   const { token } = useAuth()
-  const { t } = useI18n()
+  const { locale, t } = useI18n()
   const queryClient = useQueryClient()
 
   const [customerName, setCustomerName] = useState('')
@@ -60,6 +55,15 @@ export function CRMPage() {
 
   const trimmedKeyword = keyword.trim()
   const leadListQueryKey = ['crm-leads', statusFilter, trimmedKeyword] as const
+
+  const currencyFormatter = useMemo(
+    () =>
+      new Intl.NumberFormat(locale, {
+        style: 'currency',
+        currency: 'USD',
+      }),
+    [locale],
+  )
 
   function leadStatusLabel(status: LeadStatus): string {
     return t(`status.lead.${status}`)

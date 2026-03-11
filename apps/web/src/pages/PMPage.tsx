@@ -36,18 +36,18 @@ type ListResponse<T> = {
 
 type TaskStatusFilter = TaskStatus | 'all'
 
-function formatLogTimestamp(value: string): string {
+function formatLogTimestamp(value: string, locale: string): string {
   const parsed = new Date(value)
   if (Number.isNaN(parsed.getTime())) {
     return value
   }
 
-  return parsed.toLocaleString()
+  return parsed.toLocaleString(locale)
 }
 
 export function PMPage() {
   const { token } = useAuth()
-  const { t } = useI18n()
+  const { locale, t } = useI18n()
   const queryClient = useQueryClient()
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null)
   const [projectName, setProjectName] = useState('')
@@ -380,7 +380,7 @@ export function PMPage() {
                   <p className="muted">
                     {t('pm.byUserAt', {
                       userId: log.operatorId,
-                      timestamp: formatLogTimestamp(log.createdAt),
+                      timestamp: formatLogTimestamp(log.createdAt, locale),
                     })}
                   </p>
                 </div>

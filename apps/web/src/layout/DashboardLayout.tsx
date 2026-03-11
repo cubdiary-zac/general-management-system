@@ -19,8 +19,8 @@ export function DashboardLayout() {
       <aside className="sidebar">
         <div className="stack-md">
           <div>
-            <p className="brand">通用管理系统</p>
-            <p className="subtitle">Core + PM + CRM</p>
+            <p className="brand">{t('app.name')}</p>
+            <p className="subtitle">{t('app.subtitle')}</p>
           </div>
 
           <div className="locale-picker row-between">
@@ -43,7 +43,7 @@ export function DashboardLayout() {
 
         <div className="account-box">
           <p>{user?.name}</p>
-          <p className="muted">{user?.role}</p>
+          <p className="muted">{user?.role ? t(`role.${user.role}`) : ''}</p>
           <button type="button" onClick={onLogout} className="btn-secondary full-width">
             {t('common.logout')}
           </button>

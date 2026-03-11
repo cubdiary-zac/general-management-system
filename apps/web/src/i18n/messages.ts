@@ -23,6 +23,9 @@ export const messages: Messages = {
     'common.terminalStatus': '终止状态',
     'common.noDescription': '暂无描述',
 
+    'app.name': '通用管理系统',
+    'app.subtitle': 'Core + PM + CRM',
+
     'login.welcomeBack': '欢迎回来',
     'login.signInToSystem': '登录通用管理系统',
     'login.failed': '登录失败',
@@ -86,6 +89,11 @@ export const messages: Messages = {
     'status.lead.qualified': '已确认',
     'status.lead.won': '已成交',
     'status.lead.lost': '已丢失',
+
+    'role.owner': '所有者',
+    'role.admin': '管理员',
+    'role.member': '成员',
+    'role.viewer': '访客',
   },
   'en-US': {
     'common.language': 'Language',
@@ -106,6 +114,9 @@ export const messages: Messages = {
     'common.amount': 'Amount',
     'common.terminalStatus': 'Terminal status',
     'common.noDescription': 'No description',
+
+    'app.name': 'General Management System',
+    'app.subtitle': 'Core + PM + CRM',
 
     'login.welcomeBack': 'Welcome back',
     'login.signInToSystem': 'Sign in to 通用管理系统',
@@ -170,5 +181,10 @@ export const messages: Messages = {
     'status.lead.qualified': 'Qualified',
     'status.lead.won': 'Won',
     'status.lead.lost': 'Lost',
+
+    'role.owner': 'Owner',
+    'role.admin': 'Admin',
+    'role.member': 'Member',
+    'role.viewer': 'Viewer',
   },
 }
