@@ -33,6 +33,7 @@ func setupTestRouter(t *testing.T) (http.Handler, *gorm.DB, config.Config) {
 		&models.Lead{},
 		&models.IndustryTemplate{},
 		&models.ProjectTemplate{},
+		&models.ProjectTemplateHeaderField{},
 		&models.StageTemplate{},
 		&models.FormTemplate{},
 		&models.FormFieldTemplate{},

@@ -308,6 +308,34 @@ p {
   grid-template-columns: repeat(4, minmax(120px, 1fr));
 }
 
+.board-template-mvp-grid {
+  align-items: start;
+}
+
+.mvp-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.55rem;
+}
+
+.mvp-inline-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: var(--muted);
+}
+
+.mvp-inline-checkbox input {
+  width: auto;
+  margin: 0;
+}
+
+.mvp-stage-edit-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.55rem;
+}
+
 .task-detail-panel {
   background: rgba(255, 255, 255, 0.92);
 }
@@ -434,6 +462,10 @@ p {
 
   .tmpl-count-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .mvp-form-grid {
+    grid-template-columns: 1fr;
   }
 }
 

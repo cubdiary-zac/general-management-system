@@ -14,6 +14,7 @@ func AutoMigrate(dbConn interface {
 		&models.Lead{},
 		&models.IndustryTemplate{},
 		&models.ProjectTemplate{},
+		&models.ProjectTemplateHeaderField{},
 		&models.StageTemplate{},
 		&models.FormTemplate{},
 		&models.FormFieldTemplate{},

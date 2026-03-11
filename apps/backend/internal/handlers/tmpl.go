@@ -49,6 +49,29 @@ type createStageTemplateRequest struct {
 	Position          *int                  `json:"position"`
 }
 
+type createProjectTemplateHeaderFieldRequest struct {
+	Name       string                     `json:"name"`
+	Code       string                     `json:"code"`
+	WidgetType models.FormFieldWidgetType `json:"widgetType"`
+	Required   bool                       `json:"required"`
+	Position   *int                       `json:"position"`
+}
+
+type patchProjectTemplateHeaderFieldRequest struct {
+	Name       *string                     `json:"name"`
+	Code       *string                     `json:"code"`
+	WidgetType *models.FormFieldWidgetType `json:"widgetType"`
+	Required   *bool                       `json:"required"`
+	Position   *int                        `json:"position"`
+}
+
+type patchStageTemplateRequest struct {
+	Name        *string `json:"name"`
+	Code        *string `json:"code"`
+	Description *string `json:"description"`
+	Position    *int    `json:"position"`
+}
+
 type createFormTemplateRequest struct {
 	StageTemplateID uint                  `json:"stageTemplateId"`
 	Name            string                `json:"name"`
@@ -243,6 +266,192 @@ func (h *TemplateHandler) CreateProjectTemplate(c *gin.Context) {
 	c.JSON(http.StatusCreated, item)
 }
 
+func (h *TemplateHandler) ListProjectTemplateHeaderFields(c *gin.Context) {
+	templateID, ok := parsePositiveUintParam(c, "id")
+	if !ok {
+		return
+	}
+
+	var projectTemplate models.ProjectTemplate
+	if err := h.db.Select("id").First(&projectTemplate, templateID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "project template not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to verify project template"})
+		return
+	}
+
+	items := make([]models.ProjectTemplateHeaderField, 0)
+	if err := h.db.
+		Where("project_template_id = ?", templateID).
+		Order("position asc, id asc").
+		Find(&items).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to list project template header fields"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"items": items})
+}
+
+func (h *TemplateHandler) CreateProjectTemplateHeaderField(c *gin.Context) {
+	templateID, ok := parsePositiveUintParam(c, "id")
+	if !ok {
+		return
+	}
+
+	var req createProjectTemplateHeaderFieldRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request payload"})
+		return
+	}
+
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "name is required"})
+		return
+	}
+
+	code := strings.TrimSpace(req.Code)
+	if code == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "code is required"})
+		return
+	}
+
+	if req.WidgetType == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "widgetType is required"})
+		return
+	}
+	if !req.WidgetType.IsValid() {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid widgetType"})
+		return
+	}
+
+	position, ok := normalizePosition(req.Position)
+	if !ok {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "position must be greater than or equal to 1"})
+		return
+	}
+
+	var projectTemplate models.ProjectTemplate
+	if err := h.db.Select("id").First(&projectTemplate, templateID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "project template not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to verify project template"})
+		return
+	}
+
+	item := models.ProjectTemplateHeaderField{
+		ProjectTemplateID: templateID,
+		Name:              name,
+		Code:              code,
+		WidgetType:        req.WidgetType,
+		Required:          req.Required,
+		Position:          position,
+	}
+
+	if err := h.db.Create(&item).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create project template header field"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, item)
+}
+
+func (h *TemplateHandler) PatchProjectTemplateHeaderField(c *gin.Context) {
+	templateID, ok := parsePositiveUintParam(c, "id")
+	if !ok {
+		return
+	}
+
+	fieldID, ok := parsePositiveUintParam(c, "fieldId")
+	if !ok {
+		return
+	}
+
+	var req patchProjectTemplateHeaderFieldRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request payload"})
+		return
+	}
+
+	var projectTemplate models.ProjectTemplate
+	if err := h.db.Select("id").First(&projectTemplate, templateID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "project template not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to verify project template"})
+		return
+	}
+
+	var item models.ProjectTemplateHeaderField
+	if err := h.db.First(&item, fieldID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "project template header field not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load project template header field"})
+		return
+	}
+
+	if item.ProjectTemplateID != templateID {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "project template header field does not belong to project template"})
+		return
+	}
+
+	if req.Name != nil {
+		name := strings.TrimSpace(*req.Name)
+		if name == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "name is required"})
+			return
+		}
+		item.Name = name
+	}
+
+	if req.Code != nil {
+		code := strings.TrimSpace(*req.Code)
+		if code == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "code is required"})
+			return
+		}
+		item.Code = code
+	}
+
+	if req.WidgetType != nil {
+		if *req.WidgetType == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "widgetType is required"})
+			return
+		}
+		if !req.WidgetType.IsValid() {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid widgetType"})
+			return
+		}
+		item.WidgetType = *req.WidgetType
+	}
+
+	if req.Position != nil {
+		if *req.Position < 1 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "position must be greater than or equal to 1"})
+			return
+		}
+		item.Position = *req.Position
+	}
+
+	if req.Required != nil {
+		item.Required = *req.Required
+	}
+
+	if err := h.db.Save(&item).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update project template header field"})
+		return
+	}
+
+	c.JSON(http.StatusOK, item)
+}
+
 func (h *TemplateHandler) ListStageTemplates(c *gin.Context) {
 	filters, ok := parseTemplateListCommonFilters(c)
 	if !ok {
@@ -336,6 +545,66 @@ func (h *TemplateHandler) CreateStageTemplate(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, item)
+}
+
+func (h *TemplateHandler) PatchStageTemplate(c *gin.Context) {
+	templateID, ok := parsePositiveUintParam(c, "id")
+	if !ok {
+		return
+	}
+
+	var req patchStageTemplateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request payload"})
+		return
+	}
+
+	var item models.StageTemplate
+	if err := h.db.First(&item, templateID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "stage template not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load stage template"})
+		return
+	}
+
+	if req.Name != nil {
+		name := strings.TrimSpace(*req.Name)
+		if name == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "name is required"})
+			return
+		}
+		item.Name = name
+	}
+
+	if req.Code != nil {
+		code := strings.TrimSpace(*req.Code)
+		if code == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "code is required"})
+			return
+		}
+		item.Code = code
+	}
+
+	if req.Description != nil {
+		item.Description = strings.TrimSpace(*req.Description)
+	}
+
+	if req.Position != nil {
+		if *req.Position < 1 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "position must be greater than or equal to 1"})
+			return
+		}
+		item.Position = *req.Position
+	}
+
+	if err := h.db.Save(&item).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to update stage template"})
+		return
+	}
+
+	c.JSON(http.StatusOK, item)
 }
 
 func (h *TemplateHandler) ListFormTemplates(c *gin.Context) {
