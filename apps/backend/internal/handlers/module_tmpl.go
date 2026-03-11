@@ -28,6 +28,7 @@ func (tmplRouteModule) Register(api *gin.RouterGroup, db *gorm.DB, cfg config.Co
 		tmpl.POST("/project-templates", middleware.RequireRoles(models.RoleOwner, models.RoleAdmin, models.RoleMember), tmplHandler.CreateProjectTemplate)
 		tmpl.POST("/project-templates/:id/publish", middleware.RequireRoles(models.RoleOwner, models.RoleAdmin, models.RoleMember), tmplHandler.PublishProjectTemplate)
 		tmpl.POST("/project-templates/:id/unpublish", middleware.RequireRoles(models.RoleOwner, models.RoleAdmin, models.RoleMember), tmplHandler.UnpublishProjectTemplate)
+		tmpl.POST("/project-templates/:id/instantiate", middleware.RequireRoles(models.RoleOwner, models.RoleAdmin, models.RoleMember), tmplHandler.InstantiateProjectTemplate)
 		tmpl.GET("/stage-templates", middleware.RequireRoles(models.RoleOwner, models.RoleAdmin, models.RoleMember, models.RoleViewer), tmplHandler.ListStageTemplates)
 		tmpl.POST("/stage-templates", middleware.RequireRoles(models.RoleOwner, models.RoleAdmin, models.RoleMember), tmplHandler.CreateStageTemplate)
 		tmpl.POST("/stage-templates/:id/publish", middleware.RequireRoles(models.RoleOwner, models.RoleAdmin, models.RoleMember), tmplHandler.PublishStageTemplate)

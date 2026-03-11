@@ -70,6 +70,27 @@ type createFormFieldTemplateRequest struct {
 	WidgetType     models.FormFieldWidgetType `json:"widgetType"`
 }
 
+type instantiateProjectTemplateRequest struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+}
+
+type instantiateProjectTemplateResponse struct {
+	Project models.RuntimeProject        `json:"project"`
+	Stages  []models.RuntimeProjectStage `json:"stages"`
+	Forms   []models.RuntimeProjectForm  `json:"forms"`
+	Fields  []models.RuntimeProjectField `json:"fields"`
+}
+
+type instantiateProjectTemplateError struct {
+	status  int
+	message string
+}
+
+func (e *instantiateProjectTemplateError) Error() string {
+	return e.message
+}
+
 func (h *TemplateHandler) ListIndustryTemplates(c *gin.Context) {
 	filters, ok := parseTemplateListCommonFilters(c)
 	if !ok {
@@ -515,6 +536,188 @@ func (h *TemplateHandler) CreateFormFieldTemplate(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, item)
+}
+
+func (h *TemplateHandler) InstantiateProjectTemplate(c *gin.Context) {
+	userID, ok := currentUserID(c)
+	if !ok {
+		return
+	}
+
+	templateID, ok := parsePositiveUintParam(c, "id")
+	if !ok {
+		return
+	}
+
+	var req instantiateProjectTemplateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request payload"})
+		return
+	}
+
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "name is required"})
+		return
+	}
+	description := strings.TrimSpace(req.Description)
+
+	resp := instantiateProjectTemplateResponse{
+		Stages: make([]models.RuntimeProjectStage, 0),
+		Forms:  make([]models.RuntimeProjectForm, 0),
+		Fields: make([]models.RuntimeProjectField, 0),
+	}
+
+	if err := h.db.Transaction(func(tx *gorm.DB) error {
+		var projectTemplate models.ProjectTemplate
+		if err := tx.First(&projectTemplate, templateID).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return &instantiateProjectTemplateError{status: http.StatusNotFound, message: "project template not found"}
+			}
+			return err
+		}
+
+		if projectTemplate.Status != models.TemplateStatusPublished {
+			return &instantiateProjectTemplateError{status: http.StatusBadRequest, message: "cannot instantiate project template: template must be published"}
+		}
+
+		var industryTemplate models.IndustryTemplate
+		if err := tx.Select("id", "status").First(&industryTemplate, projectTemplate.IndustryTemplateID).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return &instantiateProjectTemplateError{status: http.StatusBadRequest, message: "cannot instantiate project template: parent industry template not found"}
+			}
+			return err
+		}
+		if industryTemplate.Status != models.TemplateStatusPublished {
+			return &instantiateProjectTemplateError{status: http.StatusBadRequest, message: "cannot instantiate project template: industry template must be published first"}
+		}
+
+		stageTemplates := make([]models.StageTemplate, 0)
+		if err := tx.Where("project_template_id = ? AND status = ?", projectTemplate.ID, models.TemplateStatusPublished).
+			Order("position asc, id asc").
+			Find(&stageTemplates).Error; err != nil {
+			return err
+		}
+		if len(stageTemplates) == 0 {
+			return &instantiateProjectTemplateError{status: http.StatusBadRequest, message: "cannot instantiate project template: no published stage templates found"}
+		}
+
+		formTemplates := make([]models.FormTemplate, 0)
+		for _, stageTemplate := range stageTemplates {
+			stageForms := make([]models.FormTemplate, 0)
+			if err := tx.Where("stage_template_id = ? AND status = ?", stageTemplate.ID, models.TemplateStatusPublished).
+				Order("position asc, id asc").
+				Find(&stageForms).Error; err != nil {
+				return err
+			}
+			formTemplates = append(formTemplates, stageForms...)
+		}
+
+		fieldTemplates := make([]models.FormFieldTemplate, 0)
+		for _, formTemplate := range formTemplates {
+			formFields := make([]models.FormFieldTemplate, 0)
+			if err := tx.Where("form_template_id = ? AND status = ?", formTemplate.ID, models.TemplateStatusPublished).
+				Order("position asc, id asc").
+				Find(&formFields).Error; err != nil {
+				return err
+			}
+			fieldTemplates = append(fieldTemplates, formFields...)
+		}
+
+		project := models.RuntimeProject{
+			Name:                   name,
+			Description:            description,
+			IndustryTemplateID:     projectTemplate.IndustryTemplateID,
+			ProjectTemplateID:      projectTemplate.ID,
+			ProjectTemplateVersion: projectTemplate.Version,
+			CreatedBy:              userID,
+		}
+		if err := tx.Create(&project).Error; err != nil {
+			return err
+		}
+		resp.Project = project
+
+		stageTemplateIDToRuntimeStageID := make(map[uint]uint, len(stageTemplates))
+		for idx, stageTemplate := range stageTemplates {
+			stageStatus := models.RuntimeProjectStageStatusPending
+			if idx == 0 {
+				stageStatus = models.RuntimeProjectStageStatusActive
+			}
+
+			stage := models.RuntimeProjectStage{
+				RuntimeProjectID: project.ID,
+				StageTemplateID:  stageTemplate.ID,
+				Name:             stageTemplate.Name,
+				Code:             stageTemplate.Code,
+				Description:      stageTemplate.Description,
+				Position:         stageTemplate.Position,
+				Status:           stageStatus,
+			}
+			if err := tx.Create(&stage).Error; err != nil {
+				return err
+			}
+			resp.Stages = append(resp.Stages, stage)
+			stageTemplateIDToRuntimeStageID[stageTemplate.ID] = stage.ID
+		}
+
+		formTemplateIDToRuntimeFormID := make(map[uint]uint, len(formTemplates))
+		for _, formTemplate := range formTemplates {
+			runtimeStageID, exists := stageTemplateIDToRuntimeStageID[formTemplate.StageTemplateID]
+			if !exists {
+				return errors.New("failed to map stage template to runtime stage")
+			}
+
+			form := models.RuntimeProjectForm{
+				RuntimeProjectID:      project.ID,
+				RuntimeProjectStageID: runtimeStageID,
+				FormTemplateID:        formTemplate.ID,
+				Name:                  formTemplate.Name,
+				Code:                  formTemplate.Code,
+				Description:           formTemplate.Description,
+				Position:              formTemplate.Position,
+			}
+			if err := tx.Create(&form).Error; err != nil {
+				return err
+			}
+			resp.Forms = append(resp.Forms, form)
+			formTemplateIDToRuntimeFormID[formTemplate.ID] = form.ID
+		}
+
+		for _, fieldTemplate := range fieldTemplates {
+			runtimeFormID, exists := formTemplateIDToRuntimeFormID[fieldTemplate.FormTemplateID]
+			if !exists {
+				return errors.New("failed to map form template to runtime form")
+			}
+
+			field := models.RuntimeProjectField{
+				RuntimeProjectID:     project.ID,
+				RuntimeProjectFormID: runtimeFormID,
+				FormFieldTemplateID:  fieldTemplate.ID,
+				Name:                 fieldTemplate.Name,
+				Code:                 fieldTemplate.Code,
+				Description:          fieldTemplate.Description,
+				Position:             fieldTemplate.Position,
+				WidgetType:           fieldTemplate.WidgetType,
+				ValueText:            nil,
+			}
+			if err := tx.Create(&field).Error; err != nil {
+				return err
+			}
+			resp.Fields = append(resp.Fields, field)
+		}
+
+		return nil
+	}); err != nil {
+		var instantiateErr *instantiateProjectTemplateError
+		if errors.As(err, &instantiateErr) {
+			c.JSON(instantiateErr.status, gin.H{"error": instantiateErr.message})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to instantiate project template"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, resp)
 }
 
 func (h *TemplateHandler) PublishIndustryTemplate(c *gin.Context) {
