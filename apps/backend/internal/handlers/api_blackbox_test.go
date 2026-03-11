@@ -66,6 +66,45 @@ type crmSummaryResp struct {
 	Counts map[string]int `json:"counts"`
 }
 
+type listIndustryTemplatesResp struct {
+	Items []struct {
+		ID   int    `json:"id"`
+		Name string `json:"name"`
+	} `json:"items"`
+}
+
+type listProjectTemplatesResp struct {
+	Items []struct {
+		ID                 int `json:"id"`
+		IndustryTemplateID int `json:"industryTemplateId"`
+	} `json:"items"`
+}
+
+type listStageTemplatesResp struct {
+	Items []struct {
+		ID                int `json:"id"`
+		ProjectTemplateID int `json:"projectTemplateId"`
+		Position          int `json:"position"`
+	} `json:"items"`
+}
+
+type listFormTemplatesResp struct {
+	Items []struct {
+		ID              int `json:"id"`
+		StageTemplateID int `json:"stageTemplateId"`
+		Position        int `json:"position"`
+	} `json:"items"`
+}
+
+type listFieldTemplatesResp struct {
+	Items []struct {
+		ID             int    `json:"id"`
+		FormTemplateID int    `json:"formTemplateId"`
+		Position       int    `json:"position"`
+		WidgetType     string `json:"widgetType"`
+	} `json:"items"`
+}
+
 func TestBlackbox_HealthAndAuth(t *testing.T) {
 	h, _, _ := setupTestRouter(t)
 
@@ -389,5 +428,131 @@ func TestBlackbox_ModuleStubHealthEndpoints(t *testing.T) {
 		if resp.Code != http.StatusOK {
 			t.Fatalf("module %s health failed: %d body=%s", moduleName, resp.Code, resp.Body.String())
 		}
+	}
+}
+
+func TestBlackbox_TemplateEngineCreateListFlow(t *testing.T) {
+	h, _, _ := setupTestRouter(t)
+
+	login := doJSONRequest(t, h, http.MethodPost, "/api/auth/login", map[string]any{
+		"email":    "admin@gms.local",
+		"password": "admin123",
+	}, "")
+	if login.Code != http.StatusOK {
+		t.Fatalf("login failed: %d body=%s", login.Code, login.Body.String())
+	}
+	token := decodeJSON[loginResp](t, login).Token
+
+	createIndustry := doJSONRequest(t, h, http.MethodPost, "/api/tmpl/industries", map[string]any{
+		"name":   "Healthcare",
+		"code":   "healthcare",
+		"status": "draft",
+	}, token)
+	if createIndustry.Code != http.StatusCreated {
+		t.Fatalf("create industry template failed: %d body=%s", createIndustry.Code, createIndustry.Body.String())
+	}
+	industryID := decodeJSON[struct {
+		ID int `json:"id"`
+	}](t, createIndustry).ID
+
+	createProjectTemplate := doJSONRequest(t, h, http.MethodPost, "/api/tmpl/project-templates", map[string]any{
+		"industryTemplateId": industryID,
+		"name":               "Clinic Setup",
+		"code":               "clinic-setup",
+		"status":             "draft",
+	}, token)
+	if createProjectTemplate.Code != http.StatusCreated {
+		t.Fatalf("create project template failed: %d body=%s", createProjectTemplate.Code, createProjectTemplate.Body.String())
+	}
+	projectTemplateID := decodeJSON[struct {
+		ID int `json:"id"`
+	}](t, createProjectTemplate).ID
+
+	createStageTemplate := doJSONRequest(t, h, http.MethodPost, "/api/tmpl/stage-templates", map[string]any{
+		"projectTemplateId": projectTemplateID,
+		"name":              "Intake",
+		"code":              "intake",
+		"status":            "draft",
+		"position":          1,
+	}, token)
+	if createStageTemplate.Code != http.StatusCreated {
+		t.Fatalf("create stage template failed: %d body=%s", createStageTemplate.Code, createStageTemplate.Body.String())
+	}
+	stageTemplateID := decodeJSON[struct {
+		ID int `json:"id"`
+	}](t, createStageTemplate).ID
+
+	createFormTemplate := doJSONRequest(t, h, http.MethodPost, "/api/tmpl/form-templates", map[string]any{
+		"stageTemplateId": stageTemplateID,
+		"name":            "Patient Intake",
+		"code":            "patient-intake",
+		"status":          "draft",
+		"position":        1,
+	}, token)
+	if createFormTemplate.Code != http.StatusCreated {
+		t.Fatalf("create form template failed: %d body=%s", createFormTemplate.Code, createFormTemplate.Body.String())
+	}
+	formTemplateID := decodeJSON[struct {
+		ID int `json:"id"`
+	}](t, createFormTemplate).ID
+
+	createFieldTemplate := doJSONRequest(t, h, http.MethodPost, "/api/tmpl/field-templates", map[string]any{
+		"formTemplateId": formTemplateID,
+		"name":           "Patient Name",
+		"code":           "patient-name",
+		"status":         "draft",
+		"position":       1,
+		"widgetType":     "input",
+	}, token)
+	if createFieldTemplate.Code != http.StatusCreated {
+		t.Fatalf("create field template failed: %d body=%s", createFieldTemplate.Code, createFieldTemplate.Body.String())
+	}
+	fieldTemplateID := decodeJSON[struct {
+		ID int `json:"id"`
+	}](t, createFieldTemplate).ID
+
+	industries := doJSONRequest(t, h, http.MethodGet, "/api/tmpl/industries", nil, token)
+	if industries.Code != http.StatusOK {
+		t.Fatalf("list industries failed: %d body=%s", industries.Code, industries.Body.String())
+	}
+	industryItems := decodeJSON[listIndustryTemplatesResp](t, industries).Items
+	if len(industryItems) == 0 || industryItems[0].ID != industryID {
+		t.Fatalf("unexpected industries payload: %+v", industryItems)
+	}
+
+	projectTemplates := doJSONRequest(t, h, http.MethodGet, "/api/tmpl/project-templates", nil, token)
+	if projectTemplates.Code != http.StatusOK {
+		t.Fatalf("list project templates failed: %d body=%s", projectTemplates.Code, projectTemplates.Body.String())
+	}
+	projectItems := decodeJSON[listProjectTemplatesResp](t, projectTemplates).Items
+	if len(projectItems) == 0 || projectItems[0].ID != projectTemplateID || projectItems[0].IndustryTemplateID != industryID {
+		t.Fatalf("unexpected project template payload: %+v", projectItems)
+	}
+
+	stageTemplates := doJSONRequest(t, h, http.MethodGet, "/api/tmpl/stage-templates", nil, token)
+	if stageTemplates.Code != http.StatusOK {
+		t.Fatalf("list stage templates failed: %d body=%s", stageTemplates.Code, stageTemplates.Body.String())
+	}
+	stageItems := decodeJSON[listStageTemplatesResp](t, stageTemplates).Items
+	if len(stageItems) == 0 || stageItems[0].ID != stageTemplateID || stageItems[0].ProjectTemplateID != projectTemplateID || stageItems[0].Position != 1 {
+		t.Fatalf("unexpected stage template payload: %+v", stageItems)
+	}
+
+	formTemplates := doJSONRequest(t, h, http.MethodGet, "/api/tmpl/form-templates", nil, token)
+	if formTemplates.Code != http.StatusOK {
+		t.Fatalf("list form templates failed: %d body=%s", formTemplates.Code, formTemplates.Body.String())
+	}
+	formItems := decodeJSON[listFormTemplatesResp](t, formTemplates).Items
+	if len(formItems) == 0 || formItems[0].ID != formTemplateID || formItems[0].StageTemplateID != stageTemplateID || formItems[0].Position != 1 {
+		t.Fatalf("unexpected form template payload: %+v", formItems)
+	}
+
+	fieldTemplates := doJSONRequest(t, h, http.MethodGet, "/api/tmpl/field-templates", nil, token)
+	if fieldTemplates.Code != http.StatusOK {
+		t.Fatalf("list field templates failed: %d body=%s", fieldTemplates.Code, fieldTemplates.Body.String())
+	}
+	fieldItems := decodeJSON[listFieldTemplatesResp](t, fieldTemplates).Items
+	if len(fieldItems) == 0 || fieldItems[0].ID != fieldTemplateID || fieldItems[0].FormTemplateID != formTemplateID || fieldItems[0].Position != 1 || fieldItems[0].WidgetType != "input" {
+		t.Fatalf("unexpected field template payload: %+v", fieldItems)
 	}
 }

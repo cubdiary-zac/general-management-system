@@ -31,6 +31,11 @@ func setupTestRouter(t *testing.T) (http.Handler, *gorm.DB, config.Config) {
 		&models.TaskTransitionLog{},
 		&models.Customer{},
 		&models.Lead{},
+		&models.IndustryTemplate{},
+		&models.ProjectTemplate{},
+		&models.StageTemplate{},
+		&models.FormTemplate{},
+		&models.FormFieldTemplate{},
 	); err != nil {
 		t.Fatalf("failed to migrate: %v", err)
 	}

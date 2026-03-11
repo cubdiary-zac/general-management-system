@@ -16,6 +16,7 @@ func registerModules(api *gin.RouterGroup, db *gorm.DB, cfg config.Config) {
 	modules := []routeModule{
 		pmRouteModule{},
 		crmRouteModule{},
+		tmplRouteModule{},
 		stubRouteModule{name: "hr"},
 		stubRouteModule{name: "fin"},
 	}

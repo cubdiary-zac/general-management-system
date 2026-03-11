@@ -12,5 +12,10 @@ func AutoMigrate(dbConn interface {
 		&models.TaskTransitionLog{},
 		&models.Customer{},
 		&models.Lead{},
+		&models.IndustryTemplate{},
+		&models.ProjectTemplate{},
+		&models.StageTemplate{},
+		&models.FormTemplate{},
+		&models.FormFieldTemplate{},
 	)
 }
