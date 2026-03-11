@@ -46,6 +46,26 @@ type listTaskLogsResp struct {
 	} `json:"items"`
 }
 
+type listCustomersResp struct {
+	Items []struct {
+		ID   int    `json:"id"`
+		Name string `json:"name"`
+	} `json:"items"`
+}
+
+type listLeadsResp struct {
+	Items []struct {
+		ID         int    `json:"id"`
+		CustomerID *int   `json:"customerId"`
+		Name       string `json:"name"`
+		Status     string `json:"status"`
+	} `json:"items"`
+}
+
+type crmSummaryResp struct {
+	Counts map[string]int `json:"counts"`
+}
+
 func TestBlackbox_HealthAndAuth(t *testing.T) {
 	h, _, _ := setupTestRouter(t)
 
@@ -241,6 +261,117 @@ func TestBlackbox_PMTaskFiltersDetailAndLogs(t *testing.T) {
 	}
 }
 
+func TestBlackbox_CRMCustomerLeadFlow(t *testing.T) {
+	h, _, _ := setupTestRouter(t)
+
+	login := doJSONRequest(t, h, http.MethodPost, "/api/auth/login", map[string]any{
+		"email":    "admin@gms.local",
+		"password": "admin123",
+	}, "")
+	if login.Code != http.StatusOK {
+		t.Fatalf("login failed: %d body=%s", login.Code, login.Body.String())
+	}
+	token := decodeJSON[loginResp](t, login).Token
+
+	createCustomer := doJSONRequest(t, h, http.MethodPost, "/api/crm/customers", map[string]any{
+		"name":    "Acme Ops",
+		"company": "Acme Ltd",
+		"email":   "ops@acme.local",
+		"phone":   "+1-555-1000",
+	}, token)
+	if createCustomer.Code != http.StatusCreated {
+		t.Fatalf("create customer failed: %d body=%s", createCustomer.Code, createCustomer.Body.String())
+	}
+	customerID := decodeJSON[struct {
+		ID int `json:"id"`
+	}](t, createCustomer).ID
+
+	customers := doJSONRequest(t, h, http.MethodGet, "/api/crm/customers", nil, token)
+	if customers.Code != http.StatusOK {
+		t.Fatalf("list customers failed: %d body=%s", customers.Code, customers.Body.String())
+	}
+	customerItems := decodeJSON[listCustomersResp](t, customers).Items
+	if len(customerItems) == 0 {
+		t.Fatalf("expected at least one customer")
+	}
+
+	leadOne := doJSONRequest(t, h, http.MethodPost, "/api/crm/leads", map[string]any{
+		"name":       "North Alpha",
+		"source":     "referral",
+		"customerId": customerID,
+		"amount":     18000,
+	}, token)
+	if leadOne.Code != http.StatusCreated {
+		t.Fatalf("create lead one failed: %d body=%s", leadOne.Code, leadOne.Body.String())
+	}
+	leadOneID := decodeJSON[struct {
+		ID int `json:"id"`
+	}](t, leadOne).ID
+
+	leadTwo := doJSONRequest(t, h, http.MethodPost, "/api/crm/leads", map[string]any{
+		"name":   "South Beta",
+		"source": "web",
+	}, token)
+	if leadTwo.Code != http.StatusCreated {
+		t.Fatalf("create lead two failed: %d body=%s", leadTwo.Code, leadTwo.Body.String())
+	}
+	leadTwoID := decodeJSON[struct {
+		ID int `json:"id"`
+	}](t, leadTwo).ID
+
+	patchLeadOneContacted := doJSONRequest(t, h, http.MethodPatch, "/api/crm/leads/"+itoa(leadOneID)+"/status", map[string]any{
+		"status": "contacted",
+	}, token)
+	if patchLeadOneContacted.Code != http.StatusOK {
+		t.Fatalf("patch lead one contacted failed: %d body=%s", patchLeadOneContacted.Code, patchLeadOneContacted.Body.String())
+	}
+
+	patchLeadOneQualified := doJSONRequest(t, h, http.MethodPatch, "/api/crm/leads/"+itoa(leadOneID)+"/status", map[string]any{
+		"status": "qualified",
+	}, token)
+	if patchLeadOneQualified.Code != http.StatusOK {
+		t.Fatalf("patch lead one qualified failed: %d body=%s", patchLeadOneQualified.Code, patchLeadOneQualified.Body.String())
+	}
+
+	patchLeadOneSame := doJSONRequest(t, h, http.MethodPatch, "/api/crm/leads/"+itoa(leadOneID)+"/status", map[string]any{
+		"status": "qualified",
+	}, token)
+	if patchLeadOneSame.Code != http.StatusOK {
+		t.Fatalf("patch lead one same status failed: %d body=%s", patchLeadOneSame.Code, patchLeadOneSame.Body.String())
+	}
+
+	patchLeadTwoLost := doJSONRequest(t, h, http.MethodPatch, "/api/crm/leads/"+itoa(leadTwoID)+"/status", map[string]any{
+		"status": "lost",
+	}, token)
+	if patchLeadTwoLost.Code != http.StatusOK {
+		t.Fatalf("patch lead two lost failed: %d body=%s", patchLeadTwoLost.Code, patchLeadTwoLost.Body.String())
+	}
+
+	filteredLeads := doJSONRequest(t, h, http.MethodGet, "/api/crm/leads?status=qualified&q=ALPHA", nil, token)
+	if filteredLeads.Code != http.StatusOK {
+		t.Fatalf("filtered leads failed: %d body=%s", filteredLeads.Code, filteredLeads.Body.String())
+	}
+	filteredItems := decodeJSON[listLeadsResp](t, filteredLeads).Items
+	if len(filteredItems) != 1 {
+		t.Fatalf("expected 1 filtered lead, got %d", len(filteredItems))
+	}
+	if filteredItems[0].ID != leadOneID || filteredItems[0].Status != "qualified" {
+		t.Fatalf("unexpected filtered lead payload: %+v", filteredItems[0])
+	}
+
+	summary := doJSONRequest(t, h, http.MethodGet, "/api/crm/summary", nil, token)
+	if summary.Code != http.StatusOK {
+		t.Fatalf("summary failed: %d body=%s", summary.Code, summary.Body.String())
+	}
+	summaryPayload := decodeJSON[crmSummaryResp](t, summary)
+	if summaryPayload.Counts["qualified"] != 1 {
+		t.Fatalf("expected qualified count 1, got %d", summaryPayload.Counts["qualified"])
+	}
+	if summaryPayload.Counts["lost"] != 1 {
+		t.Fatalf("expected lost count 1, got %d", summaryPayload.Counts["lost"])
+	}
+}
+
 func TestBlackbox_ModuleStubHealthEndpoints(t *testing.T) {
 	h, _, _ := setupTestRouter(t)
 
@@ -253,7 +384,7 @@ func TestBlackbox_ModuleStubHealthEndpoints(t *testing.T) {
 	}
 	token := decodeJSON[loginResp](t, login).Token
 
-	for _, moduleName := range []string{"crm", "hr", "fin"} {
+	for _, moduleName := range []string{"hr", "fin"} {
 		resp := doJSONRequest(t, h, http.MethodGet, "/api/"+moduleName+"/health", nil, token)
 		if resp.Code != http.StatusOK {
 			t.Fatalf("module %s health failed: %d body=%s", moduleName, resp.Code, resp.Body.String())

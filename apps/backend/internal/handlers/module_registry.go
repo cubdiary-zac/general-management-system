@@ -15,7 +15,7 @@ type routeModule interface {
 func registerModules(api *gin.RouterGroup, db *gorm.DB, cfg config.Config) {
 	modules := []routeModule{
 		pmRouteModule{},
-		stubRouteModule{name: "crm"},
+		crmRouteModule{},
 		stubRouteModule{name: "hr"},
 		stubRouteModule{name: "fin"},
 	}

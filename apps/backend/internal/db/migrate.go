@@ -10,5 +10,7 @@ func AutoMigrate(dbConn interface {
 		&models.Project{},
 		&models.Task{},
 		&models.TaskTransitionLog{},
+		&models.Customer{},
+		&models.Lead{},
 	)
 }

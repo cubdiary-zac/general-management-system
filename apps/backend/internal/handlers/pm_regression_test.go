@@ -67,3 +67,47 @@ func TestRegression_InvalidTransitionDoesNotMutateStatus(t *testing.T) {
 		t.Fatalf("expected no transition logs for failed transition, got %d", len(logItems))
 	}
 }
+
+// Regression: invalid CRM lead transition should not mutate lead status.
+func TestRegression_CRMInvalidTransitionDoesNotMutateStatus(t *testing.T) {
+	h, _, _ := setupTestRouter(t)
+
+	login := doJSONRequest(t, h, http.MethodPost, "/api/auth/login", map[string]any{
+		"email":    "admin@gms.local",
+		"password": "admin123",
+	}, "")
+	if login.Code != http.StatusOK {
+		t.Fatalf("login failed: %d", login.Code)
+	}
+	token := decodeJSON[loginResp](t, login).Token
+
+	lead := doJSONRequest(t, h, http.MethodPost, "/api/crm/leads", map[string]any{
+		"name":   "stay-new",
+		"source": "regression",
+	}, token)
+	if lead.Code != http.StatusCreated {
+		t.Fatalf("create lead failed: %d body=%s", lead.Code, lead.Body.String())
+	}
+	leadID := decodeJSON[struct {
+		ID int `json:"id"`
+	}](t, lead).ID
+
+	invalid := doJSONRequest(t, h, http.MethodPatch, "/api/crm/leads/"+itoa(leadID)+"/status", map[string]any{
+		"status": "won",
+	}, token)
+	if invalid.Code != http.StatusBadRequest {
+		t.Fatalf("expected invalid transition 400, got %d body=%s", invalid.Code, invalid.Body.String())
+	}
+
+	list := doJSONRequest(t, h, http.MethodGet, "/api/crm/leads?q=stay-new", nil, token)
+	if list.Code != http.StatusOK {
+		t.Fatalf("list leads failed: %d body=%s", list.Code, list.Body.String())
+	}
+	items := decodeJSON[listLeadsResp](t, list).Items
+	if len(items) == 0 {
+		t.Fatalf("expected leads in list")
+	}
+	if items[0].Status != "new" {
+		t.Fatalf("expected status new after invalid transition, got %s", items[0].Status)
+	}
+}

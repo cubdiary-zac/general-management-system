@@ -68,7 +68,12 @@ make down
 - `GET /api/pm/tasks/:id/logs`
 - `POST /api/pm/tasks`
 - `PATCH /api/pm/tasks/:id/status`
-- `GET /api/crm/health`
+- `GET /api/crm/customers`
+- `POST /api/crm/customers`
+- `GET /api/crm/leads?status=&q=`
+- `POST /api/crm/leads`
+- `PATCH /api/crm/leads/:id/status`
+- `GET /api/crm/summary`
 - `GET /api/hr/health`
 - `GET /api/fin/health`
 

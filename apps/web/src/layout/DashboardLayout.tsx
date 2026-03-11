@@ -16,11 +16,14 @@ export function DashboardLayout() {
       <aside className="sidebar">
         <div>
           <p className="brand">通用管理系统</p>
-          <p className="subtitle">Core + PM</p>
+          <p className="subtitle">Core + PM + CRM</p>
         </div>
         <nav className="menu">
           <NavLink to="/app/pm" className={({ isActive }) => (isActive ? 'menu-link active' : 'menu-link')}>
             Project Management
+          </NavLink>
+          <NavLink to="/app/crm" className={({ isActive }) => (isActive ? 'menu-link active' : 'menu-link')}>
+            CRM
           </NavLink>
         </nav>
         <div className="account-box">

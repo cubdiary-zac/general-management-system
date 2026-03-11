@@ -189,6 +189,25 @@ p {
   padding: 1rem;
 }
 
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(120px, 1fr));
+  gap: 0.7rem;
+}
+
+.summary-card {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--border);
+  border-radius: 0.8rem;
+  padding: 0.75rem;
+  display: grid;
+  gap: 0.2rem;
+}
+
+.summary-card strong {
+  font-size: 1.3rem;
+}
+
 .project-item {
   display: flex;
   justify-content: space-between;
@@ -280,6 +299,63 @@ p {
   gap: 0.25rem;
 }
 
+.simple-list {
+  max-height: 430px;
+  overflow: auto;
+  padding-right: 0.2rem;
+}
+
+.list-item {
+  border: 1px solid var(--border);
+  border-radius: 0.65rem;
+  background: #f8fafc;
+  padding: 0.65rem;
+}
+
+.row-between {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.lead-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.status-badge {
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.22rem 0.55rem;
+}
+
+.status-new {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.status-contacted {
+  background: #ede9fe;
+  color: #5b21b6;
+}
+
+.status-qualified {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.status-won {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.status-lost {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
 @media (max-width: 980px) {
   .app-shell {
     grid-template-columns: 1fr;
@@ -293,6 +369,10 @@ p {
 
   .panel-grid {
     grid-template-columns: 1fr;
+  }
+
+  .summary-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .kanban-grid {
@@ -311,5 +391,9 @@ p {
 
   .kanban-grid {
     grid-template-columns: 1fr;
+  }
+
+  .summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

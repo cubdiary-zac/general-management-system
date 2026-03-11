@@ -3,6 +3,7 @@ import { Navigate, Route, Routes } from 'react-router-dom'
 import { RequireAuth } from './components/RequireAuth'
 import { useAuth } from './context/AuthContext'
 import { DashboardLayout } from './layout/DashboardLayout'
+import { CRMPage } from './pages/CRMPage'
 import { LoginPage } from './pages/LoginPage'
 import { PMPage } from './pages/PMPage'
 
@@ -16,6 +17,7 @@ export default function App() {
         <Route path="/app" element={<DashboardLayout />}>
           <Route index element={<Navigate to="pm" replace />} />
           <Route path="pm" element={<PMPage />} />
+          <Route path="crm" element={<CRMPage />} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to={token ? '/app/pm' : '/login'} replace />} />
