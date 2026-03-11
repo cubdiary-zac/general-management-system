@@ -6,6 +6,7 @@ import { DashboardLayout } from './layout/DashboardLayout'
 import { CRMPage } from './pages/CRMPage'
 import { LoginPage } from './pages/LoginPage'
 import { PMPage } from './pages/PMPage'
+import { TemplateLifecyclePage } from './pages/TemplateLifecyclePage'
 
 export default function App() {
   const { token } = useAuth()
@@ -18,6 +19,7 @@ export default function App() {
           <Route index element={<Navigate to="pm" replace />} />
           <Route path="pm" element={<PMPage />} />
           <Route path="crm" element={<CRMPage />} />
+          <Route path="templates" element={<TemplateLifecyclePage />} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to={token ? '/app/pm' : '/login'} replace />} />

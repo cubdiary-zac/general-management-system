@@ -38,6 +38,9 @@ export function DashboardLayout() {
             <NavLink to="/app/crm" className={({ isActive }) => (isActive ? 'menu-link active' : 'menu-link')}>
               {t('nav.crm')}
             </NavLink>
+            <NavLink to="/app/templates" className={({ isActive }) => (isActive ? 'menu-link active' : 'menu-link')}>
+              {t('nav.templates')}
+            </NavLink>
           </nav>
         </div>
 
