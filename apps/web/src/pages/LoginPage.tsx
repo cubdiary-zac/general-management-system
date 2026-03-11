@@ -2,9 +2,12 @@ import { FormEvent, useState } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 
 import { useAuth } from '../context/AuthContext'
+import { useI18n } from '../i18n/I18nContext'
+import { Locale } from '../i18n/messages'
 
 export function LoginPage() {
   const { token, login, isReady } = useAuth()
+  const { locale, setLocale, t } = useI18n()
   const location = useLocation()
   const [email, setEmail] = useState('admin@gms.local')
   const [password, setPassword] = useState('admin123')
@@ -25,7 +28,7 @@ export function LoginPage() {
     try {
       await login(email, password)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed')
+      setError(err instanceof Error ? err.message : t('login.failed'))
     } finally {
       setIsSubmitting(false)
     }
@@ -33,12 +36,23 @@ export function LoginPage() {
 
   return (
     <div className="login-page">
-      <div className="login-card">
-        <h1>Welcome back</h1>
-        <p className="muted">Sign in to 通用管理系统</p>
+      <div className="login-card stack-md">
+        <div className="locale-picker row-between">
+          <span className="muted">{t('common.language')}</span>
+          <select value={locale} onChange={(event) => setLocale(event.target.value as Locale)}>
+            <option value="zh-CN">中文</option>
+            <option value="en-US">English</option>
+          </select>
+        </div>
+
+        <div className="stack-sm">
+          <h1>{t('login.welcomeBack')}</h1>
+          <p className="muted">{t('login.signInToSystem')}</p>
+        </div>
+
         <form onSubmit={onSubmit} className="stack-md">
           <label className="stack-sm">
-            <span>Email</span>
+            <span>{t('common.email')}</span>
             <input
               type="email"
               value={email}
@@ -48,7 +62,7 @@ export function LoginPage() {
             />
           </label>
           <label className="stack-sm">
-            <span>Password</span>
+            <span>{t('common.password')}</span>
             <input
               type="password"
               value={password}
@@ -59,7 +73,7 @@ export function LoginPage() {
           </label>
           {error && <p className="error-text">{error}</p>}
           <button type="submit" className="btn-primary" disabled={isSubmitting}>
-            {isSubmitting ? 'Signing in...' : 'Login'}
+            {isSubmitting ? t('common.signingIn') : t('common.login')}
           </button>
         </form>
       </div>

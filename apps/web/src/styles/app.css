@@ -80,6 +80,15 @@ p {
   color: #dc2626;
 }
 
+.locale-picker {
+  align-items: center;
+}
+
+.locale-picker select {
+  width: auto;
+  min-width: 120px;
+}
+
 .screen-center {
   min-height: 100vh;
   display: grid;

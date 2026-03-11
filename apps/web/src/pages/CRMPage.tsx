@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { apiClient } from '../api/client'
 import { useAuth } from '../context/AuthContext'
+import { useI18n } from '../i18n/I18nContext'
 import { LeadStatus, nextLeadStatus, orderedLeadStatuses } from './crm-utils'
 
 type Customer = {
@@ -39,12 +40,9 @@ const currencyFormatter = new Intl.NumberFormat('en-US', {
   currency: 'USD',
 })
 
-function formatLeadStatus(status: LeadStatus): string {
-  return status.charAt(0).toUpperCase() + status.slice(1)
-}
-
 export function CRMPage() {
   const { token } = useAuth()
+  const { t } = useI18n()
   const queryClient = useQueryClient()
 
   const [customerName, setCustomerName] = useState('')
@@ -62,6 +60,10 @@ export function CRMPage() {
 
   const trimmedKeyword = keyword.trim()
   const leadListQueryKey = ['crm-leads', statusFilter, trimmedKeyword] as const
+
+  function leadStatusLabel(status: LeadStatus): string {
+    return t(`status.lead.${status}`)
+  }
 
   const customersQuery = useQuery({
     queryKey: ['crm-customers'],
@@ -220,15 +222,15 @@ export function CRMPage() {
     <section className="stack-lg">
       <header className="page-header">
         <div>
-          <h1>Customer Relationship Management</h1>
-          <p className="muted">Capture customers, qualify leads, and monitor pipeline conversion.</p>
+          <h1>{t('crm.title')}</h1>
+          <p className="muted">{t('crm.subtitle')}</p>
         </div>
       </header>
 
       <section className="summary-grid">
         {orderedLeadStatuses.map((status) => (
           <article key={status} className="summary-card">
-            <p className="muted">{formatLeadStatus(status)}</p>
+            <p className="muted">{leadStatusLabel(status)}</p>
             <strong>{summaryCounts[status]}</strong>
           </article>
         ))}
@@ -236,35 +238,35 @@ export function CRMPage() {
 
       <div className="panel-grid">
         <article className="panel stack-md">
-          <h2>Customers</h2>
+          <h2>{t('crm.customers')}</h2>
           <form onSubmit={onCreateCustomer} className="stack-sm">
             <input
-              placeholder="Customer name"
+              placeholder={t('crm.customerName')}
               value={customerName}
               onChange={(event) => setCustomerName(event.target.value)}
             />
             <input
-              placeholder="Company"
+              placeholder={t('common.company')}
               value={customerCompany}
               onChange={(event) => setCustomerCompany(event.target.value)}
             />
             <input
-              placeholder="Email"
+              placeholder={t('common.email')}
               value={customerEmail}
               onChange={(event) => setCustomerEmail(event.target.value)}
             />
             <input
-              placeholder="Phone"
+              placeholder={t('common.phone')}
               value={customerPhone}
               onChange={(event) => setCustomerPhone(event.target.value)}
             />
             <button type="submit" className="btn-primary" disabled={createCustomerMutation.isPending}>
-              {createCustomerMutation.isPending ? 'Creating...' : 'Create Customer'}
+              {createCustomerMutation.isPending ? t('crm.creatingCustomer') : t('crm.createCustomer')}
             </button>
             {createCustomerError && <p className="error-text">{createCustomerError}</p>}
           </form>
 
-          {customersQuery.isPending && <p className="muted">Loading customers...</p>}
+          {customersQuery.isPending && <p className="muted">{t('crm.loadingCustomers')}</p>}
 
           <div className="stack-sm simple-list">
             {(customersQuery.data?.items ?? []).map((customer) => (
@@ -273,27 +275,29 @@ export function CRMPage() {
                   <strong>{customer.name}</strong>
                   <small className="muted">#{customer.id}</small>
                 </div>
-                <p className="muted">{customer.company || 'No company'}</p>
-                <p className="muted">{customer.email || 'No email'} | {customer.phone || 'No phone'}</p>
+                <p className="muted">{customer.company || t('crm.noCompany')}</p>
+                <p className="muted">
+                  {customer.email || t('crm.noEmail')} | {customer.phone || t('crm.noPhone')}
+                </p>
               </article>
             ))}
             {(customersQuery.data?.items?.length ?? 0) === 0 && !customersQuery.isPending && (
-              <p className="muted">No customers yet.</p>
+              <p className="muted">{t('crm.noCustomersYet')}</p>
             )}
           </div>
         </article>
 
         <article className="panel stack-md">
-          <h2>Leads</h2>
+          <h2>{t('crm.leads')}</h2>
           <form onSubmit={onCreateLead} className="stack-sm">
-            <input placeholder="Lead name" value={leadName} onChange={(event) => setLeadName(event.target.value)} />
+            <input placeholder={t('crm.leadName')} value={leadName} onChange={(event) => setLeadName(event.target.value)} />
             <input
-              placeholder="Lead source"
+              placeholder={t('crm.leadSource')}
               value={leadSource}
               onChange={(event) => setLeadSource(event.target.value)}
             />
             <select value={leadCustomerId} onChange={(event) => setLeadCustomerId(event.target.value)}>
-              <option value="">Unlinked customer</option>
+              <option value="">{t('crm.unlinkedCustomer')}</option>
               {(customersQuery.data?.items ?? []).map((customer) => (
                 <option key={customer.id} value={String(customer.id)}>
                   {customer.name}
@@ -304,33 +308,33 @@ export function CRMPage() {
               type="number"
               min={0}
               step="0.01"
-              placeholder="Amount (optional)"
+              placeholder={t('crm.amountOptional')}
               value={leadAmount}
               onChange={(event) => setLeadAmount(event.target.value)}
             />
             <button type="submit" className="btn-primary" disabled={createLeadMutation.isPending}>
-              {createLeadMutation.isPending ? 'Creating...' : 'Create Lead'}
+              {createLeadMutation.isPending ? t('crm.creatingLead') : t('crm.createLead')}
             </button>
             {createLeadError && <p className="error-text">{createLeadError}</p>}
           </form>
 
           <div className="task-filters">
             <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as LeadStatusFilter)}>
-              <option value="all">All statuses</option>
+              <option value="all">{t('common.allStatuses')}</option>
               {orderedLeadStatuses.map((status) => (
                 <option key={status} value={status}>
-                  {formatLeadStatus(status)}
+                  {leadStatusLabel(status)}
                 </option>
               ))}
             </select>
             <input
-              placeholder="Search by lead name"
+              placeholder={t('crm.searchLeadByName')}
               value={keyword}
               onChange={(event) => setKeyword(event.target.value)}
             />
           </div>
 
-          {leadsQuery.isPending && <p className="muted">Loading leads...</p>}
+          {leadsQuery.isPending && <p className="muted">{t('crm.loadingLeads')}</p>}
           {patchLeadError && <p className="error-text">{patchLeadError}</p>}
 
           <div className="stack-sm simple-list">
@@ -342,11 +346,19 @@ export function CRMPage() {
                 <article key={lead.id} className="list-item stack-sm">
                   <div className="row-between">
                     <strong>{lead.name}</strong>
-                    <span className={`status-badge status-${lead.status}`}>{formatLeadStatus(lead.status)}</span>
+                    <span className={`status-badge status-${lead.status}`}>{leadStatusLabel(lead.status)}</span>
                   </div>
-                  <p className="muted">Source: {lead.source}</p>
-                  <p className="muted">Customer: {customer?.name ?? 'Unlinked'}</p>
-                  {typeof lead.amount === 'number' && <p className="muted">Amount: {currencyFormatter.format(lead.amount)}</p>}
+                  <p className="muted">
+                    {t('common.source')}: {lead.source}
+                  </p>
+                  <p className="muted">
+                    {t('common.customer')}: {customer?.name ?? t('crm.unlinkedCustomer')}
+                  </p>
+                  {typeof lead.amount === 'number' && (
+                    <p className="muted">
+                      {t('common.amount')}: {currencyFormatter.format(lead.amount)}
+                    </p>
+                  )}
                   <div className="lead-actions">
                     {nextStatus ? (
                       <button
@@ -355,16 +367,18 @@ export function CRMPage() {
                         onClick={() => patchLeadStatusMutation.mutate({ id: lead.id, status: nextStatus })}
                         disabled={patchLeadStatusMutation.isPending}
                       >
-                        Advance to {formatLeadStatus(nextStatus)}
+                        {t('crm.advanceTo', { status: leadStatusLabel(nextStatus) })}
                       </button>
                     ) : (
-                      <small className="muted">Terminal status</small>
+                      <small className="muted">{t('common.terminalStatus')}</small>
                     )}
                   </div>
                 </article>
               )
             })}
-            {(leadsQuery.data?.items?.length ?? 0) === 0 && !leadsQuery.isPending && <p className="muted">No leads found.</p>}
+            {(leadsQuery.data?.items?.length ?? 0) === 0 && !leadsQuery.isPending && (
+              <p className="muted">{t('crm.noLeadsFound')}</p>
+            )}
           </div>
         </article>
       </div>

@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import { apiClient } from '../api/client'
 import { useAuth } from '../context/AuthContext'
+import { useI18n } from '../i18n/I18nContext'
 import { nextTaskStatus, orderedStatuses, TaskStatus } from './pm-utils'
 
 type Project = {
@@ -35,10 +36,6 @@ type ListResponse<T> = {
 
 type TaskStatusFilter = TaskStatus | 'all'
 
-function formatStatus(status: TaskStatus): string {
-  return status.split('_').join(' ')
-}
-
 function formatLogTimestamp(value: string): string {
   const parsed = new Date(value)
   if (Number.isNaN(parsed.getTime())) {
@@ -50,6 +47,7 @@ function formatLogTimestamp(value: string): string {
 
 export function PMPage() {
   const { token } = useAuth()
+  const { t } = useI18n()
   const queryClient = useQueryClient()
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null)
   const [projectName, setProjectName] = useState('')
@@ -62,6 +60,10 @@ export function PMPage() {
 
   const trimmedKeyword = keyword.trim()
   const taskListQueryKey = ['tasks', selectedProjectId, statusFilter, trimmedKeyword] as const
+
+  function taskStatusLabel(status: TaskStatus): string {
+    return t(`status.task.${status}`)
+  }
 
   const projectsQuery = useQuery({
     queryKey: ['projects'],
@@ -139,7 +141,6 @@ export function PMPage() {
     onSuccess: async () => {
       setTaskTitle('')
       setTaskDescription('')
-      // partial refresh: only refetch current tasks list
       await queryClient.invalidateQueries({ queryKey: taskListQueryKey })
     },
   })
@@ -148,7 +149,6 @@ export function PMPage() {
     mutationFn: (payload: { id: number; status: TaskStatus }) =>
       apiClient.patch<Task>(`/api/pm/tasks/${payload.id}/status`, { status: payload.status }, token ?? undefined),
     onSuccess: async (_, payload) => {
-      // partial refresh: only invalidate impacted PM task queries
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: taskListQueryKey }),
         queryClient.invalidateQueries({ queryKey: ['task', payload.id] }),
@@ -214,27 +214,27 @@ export function PMPage() {
     <section className="stack-lg">
       <header className="page-header">
         <div>
-          <h1>Project Management</h1>
-          <p className="muted">Create projects, track tasks, and progress work quickly.</p>
+          <h1>{t('pm.title')}</h1>
+          <p className="muted">{t('pm.subtitle')}</p>
         </div>
       </header>
 
       <div className="panel-grid">
         <article className="panel stack-md">
-          <h2>Projects</h2>
+          <h2>{t('pm.projects')}</h2>
           <form onSubmit={onCreateProject} className="stack-sm">
             <input
-              placeholder="New project name"
+              placeholder={t('pm.newProjectName')}
               value={projectName}
               onChange={(event) => setProjectName(event.target.value)}
             />
             <input
-              placeholder="Description"
+              placeholder={t('common.description')}
               value={projectDescription}
               onChange={(event) => setProjectDescription(event.target.value)}
             />
             <button type="submit" className="btn-primary" disabled={createProjectMutation.isPending}>
-              {createProjectMutation.isPending ? 'Creating...' : 'Create Project'}
+              {createProjectMutation.isPending ? t('pm.creatingProject') : t('pm.createProject')}
             </button>
           </form>
           <div className="stack-sm">
@@ -253,16 +253,16 @@ export function PMPage() {
         </article>
 
         <article className="panel stack-md">
-          <h2>Tasks</h2>
+          <h2>{t('pm.tasks')}</h2>
           <form onSubmit={onCreateTask} className="stack-sm">
             <input
-              placeholder="Task title"
+              placeholder={t('pm.taskTitle')}
               value={taskTitle}
               onChange={(event) => setTaskTitle(event.target.value)}
               disabled={!selectedProjectId}
             />
             <input
-              placeholder="Task description"
+              placeholder={t('pm.taskDescription')}
               value={taskDescription}
               onChange={(event) => setTaskDescription(event.target.value)}
               disabled={!selectedProjectId}
@@ -272,7 +272,7 @@ export function PMPage() {
               className="btn-primary"
               disabled={!selectedProjectId || createTaskMutation.isPending}
             >
-              {createTaskMutation.isPending ? 'Creating...' : 'Create Task'}
+              {createTaskMutation.isPending ? t('pm.creatingTask') : t('pm.createTask')}
             </button>
           </form>
 
@@ -282,15 +282,15 @@ export function PMPage() {
               onChange={(event) => setStatusFilter(event.target.value as TaskStatusFilter)}
               disabled={!selectedProjectId}
             >
-              <option value="all">All statuses</option>
+              <option value="all">{t('common.allStatuses')}</option>
               {orderedStatuses.map((status) => (
                 <option key={status} value={status}>
-                  {formatStatus(status)}
+                  {taskStatusLabel(status)}
                 </option>
               ))}
             </select>
             <input
-              placeholder="Search by task title"
+              placeholder={t('pm.searchTaskByTitle')}
               value={keyword}
               onChange={(event) => setKeyword(event.target.value)}
               disabled={!selectedProjectId}
@@ -302,7 +302,7 @@ export function PMPage() {
       <section className="kanban-grid">
         {orderedStatuses.map((status) => (
           <article key={status} className="kanban-column">
-            <h3>{formatStatus(status)}</h3>
+            <h3>{taskStatusLabel(status)}</h3>
             <div className="stack-sm">
               {board[status].map((task) => {
                 const next = nextTaskStatus(task.status)
@@ -317,7 +317,7 @@ export function PMPage() {
                     tabIndex={0}
                   >
                     <strong>{task.title}</strong>
-                    <p className="muted">{task.description || 'No description'}</p>
+                    <p className="muted">{task.description || t('common.noDescription')}</p>
                     {next ? (
                       <button
                         type="button"
@@ -328,15 +328,15 @@ export function PMPage() {
                         }}
                         disabled={patchTaskStatusMutation.isPending}
                       >
-                        Move to {formatStatus(next)}
+                        {t('pm.moveTo', { status: taskStatusLabel(next) })}
                       </button>
                     ) : (
-                      <span className="done-badge">Completed</span>
+                      <span className="done-badge">{t('pm.completed')}</span>
                     )}
                   </div>
                 )
               })}
-              {board[status].length === 0 && <p className="muted">No tasks</p>}
+              {board[status].length === 0 && <p className="muted">{t('pm.noTasks')}</p>}
             </div>
           </article>
         ))}
@@ -344,42 +344,49 @@ export function PMPage() {
 
       <section className="panel task-detail-panel stack-md">
         <div className="task-detail-heading">
-          <h2>Task Detail</h2>
+          <h2>{t('pm.taskDetail')}</h2>
           {selectedTaskId && <small className="muted">#{selectedTaskId}</small>}
         </div>
 
-        {!selectedTaskId && <p className="muted">Select a task card to inspect its detail and transition logs.</p>}
+        {!selectedTaskId && <p className="muted">{t('pm.selectTaskHint')}</p>}
 
-        {selectedTaskId && taskDetailQuery.isPending && <p className="muted">Loading task detail...</p>}
+        {selectedTaskId && taskDetailQuery.isPending && <p className="muted">{t('pm.loadingTaskDetail')}</p>}
 
         {selectedTaskId && taskDetailQuery.data && (
           <article className="stack-sm">
             <strong>{taskDetailQuery.data.title}</strong>
-            <p className="muted">{taskDetailQuery.data.description || 'No description'}</p>
+            <p className="muted">{taskDetailQuery.data.description || t('common.noDescription')}</p>
             <div className="task-meta-row">
-              <span>Status: {formatStatus(taskDetailQuery.data.status)}</span>
-              <span>Project: #{taskDetailQuery.data.projectId}</span>
+              <span>
+                {t('common.status')}: {taskStatusLabel(taskDetailQuery.data.status)}
+              </span>
+              <span>
+                {t('common.project')}: #{taskDetailQuery.data.projectId}
+              </span>
             </div>
           </article>
         )}
 
         {selectedTaskId && (
           <article className="stack-sm">
-            <h3>Transition Logs</h3>
-            {taskLogsQuery.isPending && <p className="muted">Loading transition logs...</p>}
+            <h3>{t('pm.transitionLogs')}</h3>
+            {taskLogsQuery.isPending && <p className="muted">{t('pm.loadingTransitionLogs')}</p>}
             {!taskLogsQuery.isPending &&
               (taskLogsQuery.data?.items ?? []).map((log) => (
                 <div key={log.id} className="log-item">
                   <p>
-                    <strong>{formatStatus(log.fromStatus)}</strong> to <strong>{formatStatus(log.toStatus)}</strong>
+                    <strong>{taskStatusLabel(log.fromStatus)}</strong> → <strong>{taskStatusLabel(log.toStatus)}</strong>
                   </p>
                   <p className="muted">
-                    By user #{log.operatorId} at {formatLogTimestamp(log.createdAt)}
+                    {t('pm.byUserAt', {
+                      userId: log.operatorId,
+                      timestamp: formatLogTimestamp(log.createdAt),
+                    })}
                   </p>
                 </div>
               ))}
             {!taskLogsQuery.isPending && (taskLogsQuery.data?.items?.length ?? 0) === 0 && (
-              <p className="muted">No transitions yet.</p>
+              <p className="muted">{t('pm.noTransitionsYet')}</p>
             )}
           </article>
         )}
