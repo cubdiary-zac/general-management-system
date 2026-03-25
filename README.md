@@ -2,6 +2,8 @@
 
 First runnable scaffold for a private, local-deployable modular-monolith.
 
+routing test
+
 ## Stack
 - Backend: Go, Gin, GORM, PostgreSQL, JWT
 - Frontend: React, Vite, TypeScript, TanStack Query
@@ -85,5 +87,3 @@ Task status flow:
 - `make build` build backend and frontend
 - `make test` run backend tests
 - `make ci-gate` run backend unit+blackbox+regression+smoke tests and frontend test+build gate
-
-routing test
