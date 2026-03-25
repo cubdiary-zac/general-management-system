@@ -2,6 +2,8 @@
 
 First runnable scaffold for a private, local-deployable modular-monolith.
 
+routing test
+
 ## Stack
 - Backend: Go, Gin, GORM, PostgreSQL, JWT
 - Frontend: React, Vite, TypeScript, TanStack Query
