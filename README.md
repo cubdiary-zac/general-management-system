@@ -85,3 +85,5 @@ Task status flow:
 - `make build` build backend and frontend
 - `make test` run backend tests
 - `make ci-gate` run backend unit+blackbox+regression+smoke tests and frontend test+build gate
+
+routing test
