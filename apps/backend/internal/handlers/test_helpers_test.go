@@ -92,3 +92,33 @@ func decodeJSON[T any](t *testing.T, rr *httptest.ResponseRecorder) T {
 	}
 	return out
 }
+
+func TestHealthEndpoint_Connectivity(t *testing.T) {
+	router, _, _ := setupTestRouter(t)
+
+	rr := doJSONRequest(t, router, http.MethodGet, "/api/health", nil, "")
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d, body=%s", http.StatusOK, rr.Code, rr.Body.String())
+	}
+
+	var resp map[string]any
+	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("failed to unmarshal health response: %v, body=%s", err, rr.Body.String())
+	}
+
+	if status, ok := resp["status"].(string); !ok || status != "ok" {
+		t.Fatalf("expected status=ok, got %#v", resp["status"])
+	}
+
+	if service, ok := resp["service"].(string); !ok || service == "" {
+		t.Fatalf("expected non-empty service, got %#v", resp["service"])
+	}
+
+	if version, ok := resp["version"].(string); !ok || version == "" {
+		t.Fatalf("expected non-empty version, got %#v", resp["version"])
+	}
+
+	if timestamp, ok := resp["timestamp"].(string); !ok || timestamp == "" {
+		t.Fatalf("expected non-empty timestamp, got %#v", resp["timestamp"])
+	}
+}
