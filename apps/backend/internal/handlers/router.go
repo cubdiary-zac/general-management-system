@@ -22,10 +22,12 @@ func SetupRouter(db *gorm.DB, cfg config.Config) *gin.Engine {
 	})
 
 	authHandler := NewAuthHandler(db, cfg)
+	feishuWebhookHandler := NewFeishuWebhookHandler(cfg)
 
 	api := router.Group("/api")
 	{
 		api.GET("/health", Health)
+		api.POST("/feishu/callback", feishuWebhookHandler.Callback)
 
 		authGroup := api.Group("/auth")
 		{

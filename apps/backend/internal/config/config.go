@@ -7,26 +7,28 @@ import (
 )
 
 type Config struct {
-	AppEnv            string
-	ServerPort        string
-	DatabaseURL       string
-	JWTSecret         string
-	JWTTTLHours       int
-	SeedAdminName     string
-	SeedAdminEmail    string
-	SeedAdminPassword string
+	AppEnv               string
+	ServerPort           string
+	DatabaseURL          string
+	JWTSecret            string
+	JWTTTLHours          int
+	SeedAdminName        string
+	SeedAdminEmail       string
+	SeedAdminPassword    string
+	FeishuVerificationToken string
 }
 
 func Load() Config {
 	cfg := Config{
-		AppEnv:            getEnv("APP_ENV", "development"),
-		ServerPort:        getEnv("SERVER_PORT", "8080"),
-		DatabaseURL:       getDatabaseURL(),
-		JWTSecret:         getEnv("JWT_SECRET", "dev-only-secret"),
-		JWTTTLHours:       getEnvInt("JWT_TTL_HOURS", 24),
-		SeedAdminName:     getEnv("SEED_ADMIN_NAME", "System Owner"),
-		SeedAdminEmail:    getEnv("SEED_ADMIN_EMAIL", "admin@gms.local"),
-		SeedAdminPassword: getEnv("SEED_ADMIN_PASSWORD", "admin123"),
+		AppEnv:                  getEnv("APP_ENV", "development"),
+		ServerPort:              getEnv("SERVER_PORT", "8080"),
+		DatabaseURL:             getDatabaseURL(),
+		JWTSecret:               getEnv("JWT_SECRET", "dev-only-secret"),
+		JWTTTLHours:             getEnvInt("JWT_TTL_HOURS", 24),
+		SeedAdminName:           getEnv("SEED_ADMIN_NAME", "System Owner"),
+		SeedAdminEmail:          getEnv("SEED_ADMIN_EMAIL", "admin@gms.local"),
+		SeedAdminPassword:       getEnv("SEED_ADMIN_PASSWORD", "admin123"),
+		FeishuVerificationToken: getEnv("FEISHU_VERIFICATION_TOKEN", ""),
 	}
 
 	return cfg
